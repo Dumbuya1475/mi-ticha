@@ -23,36 +23,14 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const studentId = localStorage.getItem("studentId")
-
-      // First check localStorage for quick validation
-      if (!studentId || studentId !== params.id) {
-        console.log("[v0] Student not authenticated in localStorage, redirecting to login")
-        router.push("/student-login")
-        return
-      }
-
-      // Then verify Supabase Auth session
-      const supabase = createBrowserClient()
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession()
-
-      if (error || !session) {
-        console.log("[v0] No valid Supabase session, redirecting to login")
-        localStorage.removeItem("studentId")
-        localStorage.removeItem("studentName")
-        router.push("/student-login")
-        return
-      }
-
-      // Both checks passed, load student data
-      loadStudentData()
+    const studentId = localStorage.getItem("studentId")
+    if (!studentId || studentId !== params.id) {
+      console.log("[v0] Student not authenticated, redirecting to login")
+      router.push("/student-login")
+      return
     }
 
-    checkAuth()
+    loadStudentData()
   }, [params.id, router])
 
   const loadStudentData = async () => {

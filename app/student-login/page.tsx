@@ -47,9 +47,6 @@ export default function StudentLoginPage() {
       }
 
       if (result.success && result.studentId) {
-        localStorage.setItem("studentId", result.studentId)
-        localStorage.setItem("studentName", result.studentName || username)
-
         console.log("[v0] Redirecting to student dashboard:", result.studentId)
         router.push(`/student/${result.studentId}`)
       }
