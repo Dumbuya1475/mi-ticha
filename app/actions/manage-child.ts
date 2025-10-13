@@ -28,10 +28,11 @@ export async function createChildAccount(formData: {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id")
-      .eq("auth_user_id", user.id)
+      .eq("id", user.id)
       .single()
 
     if (profileError || !profile) {
+      console.error("[v0] Profile error:", profileError)
       return { error: "Parent profile not found" }
     }
 
@@ -61,7 +62,7 @@ export async function createChildAccount(formData: {
       .insert({
         name: formData.name,
         age: formData.age,
-        grade: formData.grade,
+        grade_level: formData.grade,
         parent_id: profile.id,
         auth_user_id: authData.user.id,
         is_managed: true,
@@ -103,7 +104,7 @@ export async function resetChildPassword(studentId: string, newPassword: string)
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id")
-      .eq("auth_user_id", user.id)
+      .eq("id", user.id)
       .single()
 
     if (profileError || !profile) {
@@ -158,7 +159,7 @@ export async function deleteChildAccount(studentId: string) {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id")
-      .eq("auth_user_id", user.id)
+      .eq("id", user.id)
       .single()
 
     if (profileError || !profile) {
@@ -218,17 +219,22 @@ export async function updateChildProfile(
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id")
-      .eq("auth_user_id", user.id)
+      .eq("id", user.id)
       .single()
 
     if (profileError || !profile) {
       return { error: "Parent profile not found" }
     }
 
+    const dbUpdates: any = {}
+    if (updates.name) dbUpdates.name = updates.name
+    if (updates.age) dbUpdates.age = updates.age
+    if (updates.grade) dbUpdates.grade_level = updates.grade
+
     // Update student (RLS will verify ownership)
     const { error: updateError } = await supabase
       .from("students")
-      .update(updates)
+      .update(dbUpdates)
       .eq("id", studentId)
       .eq("parent_id", profile.id)
 
