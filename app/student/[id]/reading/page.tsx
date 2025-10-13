@@ -7,88 +7,133 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Clock, CheckCircle2, XCircle } from "lucide-react"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 // Sample reading passages
-const readingPassages = [
-  {
-    id: "1",
-    title: "The Clever Tortoise",
-    level: "Beginner",
-    text: `Once upon a time, there was a clever tortoise who lived near a big river. All the animals in the forest knew the tortoise was very wise.
+interface ReadingPassage {
+  id: string
+  title: string
+  level: string
+  text: string
+  questions: {
+    question: string
+    options: string[]
+    correct: number
+  }[]
+}
+
+type ReadingStage = "select" | "reading" | "questions" | "results"
+
+export default function ReadingPracticePage({ params }: { params: { id: string } }) {
+  const [stage, setStage] = useState<ReadingStage>("select")
+  const [passages, setPassages] = useState<ReadingPassage[]>([])
+  const [selectedPassage, setSelectedPassage] = useState<ReadingPassage | null>(null)
+  const [timeElapsed, setTimeElapsed] = useState(0)
+  const [isTimerRunning, setIsTimerRunning] = useState(false)
+  const [answers, setAnswers] = useState<number[]>([])
+  const [score, setScore] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    loadPassages()
+  }, [])
+
+  const loadPassages = async () => {
+    try {
+      const supabase = createBrowserClient()
+
+      // Fetch reading passages from database
+      const { data, error } = await supabase.from("reading_passages").select("*").order("level", { ascending: true })
+
+      if (error) {
+        console.error("[v0] Error loading passages:", error)
+        // If table doesn't exist yet, use sample data
+        setPassages(getSamplePassages())
+      } else if (data && data.length > 0) {
+        setPassages(data)
+      } else {
+        // No passages in database, use sample data
+        setPassages(getSamplePassages())
+      }
+    } catch (error) {
+      console.error("[v0] Error:", error)
+      setPassages(getSamplePassages())
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Sample passages as fallback
+  const getSamplePassages = (): ReadingPassage[] => [
+    {
+      id: "1",
+      title: "The Clever Tortoise",
+      level: "Beginner",
+      text: `Once upon a time, there was a clever tortoise who lived near a big river. All the animals in the forest knew the tortoise was very wise.
 
 One day, the animals had a problem. The river was too wide to cross, and they needed to get to the other side where the best fruit trees grew.
 
 The tortoise thought carefully. Then he had an idea! He asked all the birds to bring stones and drop them in the river. Day by day, the stones piled up until they made a bridge.
 
 All the animals were happy. They could now cross the river safely. The tortoise smiled, knowing that working together made them stronger.`,
-    questions: [
-      {
-        question: "Where did the tortoise live?",
-        options: ["In a tree", "Near a big river", "In the mountains", "In a cave"],
-        correct: 1,
-      },
-      {
-        question: "What was the animals' problem?",
-        options: ["They were hungry", "The river was too wide to cross", "They had no water", "They were lost"],
-        correct: 1,
-      },
-      {
-        question: "How did the tortoise solve the problem?",
-        options: [
-          "He swam across",
-          "He built a boat",
-          "He asked birds to bring stones to make a bridge",
-          "He found another path",
-        ],
-        correct: 2,
-      },
-    ],
-  },
-  {
-    id: "2",
-    title: "Market Day in Freetown",
-    level: "Intermediate",
-    text: `Every Saturday, the big market in Freetown comes alive with colors, sounds, and delicious smells. Vendors arrange their goods carefully - bright fabrics, fresh vegetables, and handmade crafts.
+      questions: [
+        {
+          question: "Where did the tortoise live?",
+          options: ["In a tree", "Near a big river", "In the mountains", "In a cave"],
+          correct: 1,
+        },
+        {
+          question: "What was the animals' problem?",
+          options: ["They were hungry", "The river was too wide to cross", "They had no water", "They were lost"],
+          correct: 1,
+        },
+        {
+          question: "How did the tortoise solve the problem?",
+          options: [
+            "He swam across",
+            "He built a boat",
+            "He asked birds to bring stones to make a bridge",
+            "He found another path",
+          ],
+          correct: 2,
+        },
+      ],
+    },
+    {
+      id: "2",
+      title: "Market Day in Freetown",
+      level: "Intermediate",
+      text: `Every Saturday, the big market in Freetown comes alive with colors, sounds, and delicious smells. Vendors arrange their goods carefully - bright fabrics, fresh vegetables, and handmade crafts.
 
 Mariama helps her mother sell vegetables at the market. She has learned to count money quickly and speak politely to customers. Her favorite part is meeting people from different parts of the city.
 
 Today, a tourist asked Mariama about the best local fruits. She proudly explained about mangoes, pineapples, and sweet oranges. The tourist was impressed by her knowledge and bought a large basket of fruit.
 
 Mariama's mother smiled. She knew her daughter was learning important skills that would help her in the future. Hard work and good communication were valuable lessons.`,
-    questions: [
-      {
-        question: "When does the big market happen?",
-        options: ["Every day", "Every Saturday", "Every Sunday", "Once a month"],
-        correct: 1,
-      },
-      {
-        question: "What does Mariama sell at the market?",
-        options: ["Fabrics", "Vegetables", "Crafts", "Fruits only"],
-        correct: 1,
-      },
-      {
-        question: "What skills is Mariama learning?",
-        options: [
-          "Cooking and cleaning",
-          "Reading and writing",
-          "Counting money and communication",
-          "Singing and dancing",
-        ],
-        correct: 2,
-      },
-    ],
-  },
-]
-
-type ReadingStage = "select" | "reading" | "questions" | "results"
-
-export default function ReadingPracticePage({ params }: { params: { id: string } }) {
-  const [stage, setStage] = useState<ReadingStage>("select")
-  const [selectedPassage, setSelectedPassage] = useState<(typeof readingPassages)[0] | null>(null)
-  const [timeElapsed, setTimeElapsed] = useState(0)
-  const [isTimerRunning, setIsTimerRunning] = useState(false)
-  const [answers, setAnswers] = useState<number[]>([])
-  const [score, setScore] = useState(0)
+      questions: [
+        {
+          question: "When does the big market happen?",
+          options: ["Every day", "Every Saturday", "Every Sunday", "Once a month"],
+          correct: 1,
+        },
+        {
+          question: "What does Mariama sell at the market?",
+          options: ["Fabrics", "Vegetables", "Crafts", "Fruits only"],
+          correct: 1,
+        },
+        {
+          question: "What skills is Mariama learning?",
+          options: [
+            "Cooking and cleaning",
+            "Reading and writing",
+            "Counting money and communication",
+            "Singing and dancing",
+          ],
+          correct: 2,
+        },
+      ],
+    },
+  ]
 
   // Timer effect
   useEffect(() => {
@@ -107,7 +152,7 @@ export default function ReadingPracticePage({ params }: { params: { id: string }
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  const handleSelectPassage = (passage: (typeof readingPassages)[0]) => {
+  const handleSelectPassage = (passage: ReadingPassage) => {
     setSelectedPassage(passage)
     setStage("reading")
     setTimeElapsed(0)
@@ -126,7 +171,7 @@ export default function ReadingPracticePage({ params }: { params: { id: string }
     setAnswers(newAnswers)
   }
 
-  const handleSubmitAnswers = () => {
+  const handleSubmitAnswers = async () => {
     if (!selectedPassage) return
 
     let correctCount = 0
@@ -138,6 +183,26 @@ export default function ReadingPracticePage({ params }: { params: { id: string }
 
     setScore(correctCount)
     setStage("results")
+
+    try {
+      const supabase = createBrowserClient()
+
+      await supabase.from("reading_activities").insert({
+        student_id: params.id,
+        passage_id: selectedPassage.id,
+        time_spent_seconds: timeElapsed,
+        comprehension_score: Math.round((correctCount / selectedPassage.questions.length) * 100),
+        answers_data: {
+          answers: answers,
+          correct: correctCount,
+          total: selectedPassage.questions.length,
+        },
+      })
+
+      console.log("[v0] Reading session saved successfully")
+    } catch (error) {
+      console.error("[v0] Error saving reading session:", error)
+    }
   }
 
   const handleRestart = () => {
@@ -147,6 +212,14 @@ export default function ReadingPracticePage({ params }: { params: { id: string }
     setIsTimerRunning(false)
     setAnswers([])
     setScore(0)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10">
+        <p className="font-semibold text-lg">Loading passages...</p>
+      </div>
+    )
   }
 
   return (
@@ -181,26 +254,32 @@ export default function ReadingPracticePage({ params }: { params: { id: string }
               <p className="text-muted-foreground text-lg">Pick a story and test your reading comprehension!</p>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              {readingPassages.map((passage) => (
-                <Card key={passage.id} className="border-2 transition-shadow hover:shadow-lg">
-                  <CardHeader>
-                    <div className="mb-2 flex items-center justify-between">
-                      <CardTitle className="text-xl">{passage.title}</CardTitle>
-                      <Badge variant="outline">{passage.level}</Badge>
-                    </div>
-                    <CardDescription className="text-base">
-                      {passage.questions.length} comprehension questions
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button onClick={() => handleSelectPassage(passage)} className="w-full font-semibold" size="lg">
-                      Start Reading
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {passages.length === 0 ? (
+              <Card className="border-2 p-8 text-center">
+                <p className="text-muted-foreground">No reading passages available yet. Check back soon!</p>
+              </Card>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2">
+                {passages.map((passage) => (
+                  <Card key={passage.id} className="border-2 transition-shadow hover:shadow-lg">
+                    <CardHeader>
+                      <div className="mb-2 flex items-center justify-between">
+                        <CardTitle className="text-xl">{passage.title}</CardTitle>
+                        <Badge variant="outline">{passage.level}</Badge>
+                      </div>
+                      <CardDescription className="text-base">
+                        {passage.questions.length} comprehension questions
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button onClick={() => handleSelectPassage(passage)} className="w-full font-semibold" size="lg">
+                        Start Reading
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -23,14 +23,36 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const studentId = localStorage.getItem("studentId")
-    if (!studentId || studentId !== params.id) {
-      console.log("[v0] Student not authenticated, redirecting to login")
-      router.push("/student-login")
-      return
+    const checkAuth = async () => {
+      const studentId = localStorage.getItem("studentId")
+
+      // First check localStorage for quick validation
+      if (!studentId || studentId !== params.id) {
+        console.log("[v0] Student not authenticated in localStorage, redirecting to login")
+        router.push("/student-login")
+        return
+      }
+
+      // Then verify Supabase Auth session
+      const supabase = createBrowserClient()
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession()
+
+      if (error || !session) {
+        console.log("[v0] No valid Supabase session, redirecting to login")
+        localStorage.removeItem("studentId")
+        localStorage.removeItem("studentName")
+        router.push("/student-login")
+        return
+      }
+
+      // Both checks passed, load student data
+      loadStudentData()
     }
 
-    loadStudentData()
+    checkAuth()
   }, [params.id, router])
 
   const loadStudentData = async () => {
@@ -52,8 +74,47 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
 
       setStudent(studentData)
 
-      // Load stats (mock for now)
-      setStats({ streak: 5, totalSessions: 24 })
+      // Calculate learning streak (consecutive days with activity)
+      const { data: recentQuestions } = await supabase
+        .from("questions")
+        .select("created_at")
+        .eq("student_id", params.id)
+        .order("created_at", { ascending: false })
+        .limit(30)
+
+      let streak = 0
+      if (recentQuestions && recentQuestions.length > 0) {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        const activityDates = new Set(
+          recentQuestions.map((q) => {
+            const date = new Date(q.created_at)
+            date.setHours(0, 0, 0, 0)
+            return date.getTime()
+          }),
+        )
+
+        let currentDate = today.getTime()
+        while (activityDates.has(currentDate)) {
+          streak++
+          currentDate -= 24 * 60 * 60 * 1000 // Go back one day
+        }
+      }
+
+      // Calculate total sessions (distinct days with activity)
+      const { data: allQuestions } = await supabase.from("questions").select("created_at").eq("student_id", params.id)
+
+      const totalSessions = allQuestions
+        ? new Set(
+            allQuestions.map((q) => {
+              const date = new Date(q.created_at)
+              return date.toDateString()
+            }),
+          ).size
+        : 0
+
+      setStats({ streak, totalSessions })
     } catch (error) {
       console.error("[v0] Error:", error)
     } finally {
