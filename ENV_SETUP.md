@@ -83,7 +83,8 @@ NEXT_PUBLIC_VERCEL_ANALYTICS_ID=your_analytics_id_here
 RESEND_API_KEY=your_resend_api_key_here
 
 # File storage (if not using Supabase Storage)
-NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN=your_blob_token_here
+# WARNING: Keep this server-side only - do NOT use NEXT_PUBLIC_ prefix
+BLOB_READ_WRITE_TOKEN=your_blob_token_here
 \`\`\`
 
 ## Step 4: Supabase Database Setup
