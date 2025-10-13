@@ -53,7 +53,7 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
           .from("students")
           .select("*")
           .eq("id", params.id)
-          .single()
+          .maybeSingle()
 
         if (studentError || !studentData) {
           console.error("[v0] Error fetching student:", studentError)
@@ -83,7 +83,7 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
           .eq("student_id", params.id)
           .order("created_at", { ascending: false })
           .limit(1)
-          .single()
+          .maybeSingle()
 
         const lastActive = lastSession ? formatLastActive(new Date(lastSession.created_at)) : "No activity yet"
 

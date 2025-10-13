@@ -64,10 +64,24 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
         .from("students")
         .select("id, name, age, grade_level")
         .eq("id", params.id)
-        .single()
+        .maybeSingle()
 
       if (studentError) {
         console.error("[v0] Error loading student:", studentError)
+        // Log structured details to help diagnose HTTP errors (e.g. 406 Not Acceptable)
+        try {
+          console.error("[v0] Student error details:", {
+            status: (studentError as any)?.status,
+            message: (studentError as any)?.message,
+            details: (studentError as any)?.details,
+            hint: (studentError as any)?.hint,
+          })
+          // Also attempt to stringify for any nested fields
+          console.debug("[v0] Full studentError object:", JSON.stringify(studentError, Object.getOwnPropertyNames(studentError), 2))
+        } catch (e) {
+          console.error("[v0] Failed to stringify studentError:", e)
+        }
+
         router.push("/student-login")
         return
       }

@@ -46,7 +46,7 @@ export default function ChatWithMoePage({ params }: { params: { id: string } }) 
                 avatar_used: "moe",
               })
               .select()
-              .single()
+              .maybeSingle()
 
             if (!questionError && questionData) {
               // Insert answer
