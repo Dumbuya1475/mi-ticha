@@ -3,53 +3,48 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { BookOpen, MessageSquare, BarChart3, Heart } from "lucide-react"
 
+import { SiteHeader } from "@/components/site-header"
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen">
+      <SiteHeader />
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary via-secondary to-accent px-4 py-16 md:py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center">
-            <h1 className="mb-6 text-balance font-bold text-5xl text-white md:text-6xl lg:text-7xl">Mi Ticha</h1>
-            <p className="mb-4 text-balance font-semibold text-2xl text-white/95 md:text-3xl">
-              Your Child's AI Learning Companion
-            </p>
-            <p className="mx-auto mb-8 max-w-2xl text-pretty text-lg text-white/90 leading-relaxed md:text-xl">
-              Empowering Sierra Leone students ages 8-14 with personalized homework help and reading practice. Meet Moe,
-              the friendly AI tutor who makes learning fun!
-            </p>
-            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+      <section className="relative overflow-hidden bg-white px-4 py-16 md:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 items-center">
+            <div>
+              <h1 className="mb-6 text-balance font-bold text-6xl text-blue-600">
+                Language mastery made easy!
+              </h1>
+              <p className="mb-8 text-pretty text-lg text-gray-700 leading-relaxed md:text-xl">
+                Our innovative language programs make learning fun and effective for children of all ages. 
+                Start their language journey today!
+              </p>
               <Button
                 asChild
                 size="lg"
-                className="h-14 bg-white px-8 font-semibold text-lg text-primary hover:bg-white/90"
+                className="h-14 bg-yellow-400 px-8 font-semibold text-lg text-white hover:bg-yellow-500"
               >
-                <Link href="/signup">Get Started Free</Link>
+                <Link href="/signup">Enroll now!</Link>
               </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="h-14 border-2 border-white bg-white/10 px-8 font-semibold text-lg text-white backdrop-blur-sm hover:bg-white/20"
-              >
-                <Link href="/student-login">Student Login</Link>
-              </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="h-14 border-2 border-white bg-transparent px-8 font-semibold text-lg text-white hover:bg-white/10"
-              >
-                <Link href="#features">Learn More</Link>
-              </Button>
+            </div>
+            <div className="relative">
+              {/* This is where we'll add the hero image */}
+              <div className="relative z-10 rounded-lg overflow-hidden">
+                <div className="absolute -right-4 top-4 w-64 h-64 bg-coral-500 rounded-full opacity-20" />
+                <div className="absolute -left-4 bottom-4 w-64 h-64 bg-purple-500 rounded-full opacity-20" />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Decorative elements */}
-        <div className="pointer-events-none absolute inset-0 opacity-20">
-          <div className="absolute top-20 right-10 h-32 w-32 rounded-full bg-white blur-3xl" />
-          <div className="absolute bottom-20 left-10 h-40 w-40 rounded-full bg-white blur-3xl" />
+        {/* Wave decoration at bottom */}
+        <div className="absolute bottom-0 left-0 w-full">
+          <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,96L48,85.3C96,75,192,53,288,53.3C384,53,480,75,576,90.7C672,107,768,117,864,112C960,107,1056,85,1152,74.7C1248,64,1344,64,1392,64L1440,64L1440,120L1392,120C1344,120,1248,120,1152,120C1056,120,960,120,864,120C768,120,672,120,576,120C480,120,384,120,288,120C192,120,96,120,48,120L0,120Z" 
+              fill="#F3F4F6"/>
+          </svg>
         </div>
       </section>
 
