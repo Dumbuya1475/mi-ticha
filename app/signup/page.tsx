@@ -65,7 +65,12 @@ export default function SignupPage() {
     setIsLoading(true)
 
     try {
+      console.log("[v0] Starting signup process...")
+      console.log("[v0] Form data:", { email: formData.email, name: formData.name })
+
       const supabase = createBrowserClient()
+
+      console.log("[v0] Supabase client created, attempting signup...")
 
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
@@ -79,7 +84,10 @@ export default function SignupPage() {
         },
       })
 
+      console.log("[v0] Signup response:", { data, error })
+
       if (error) {
+        console.error("[v0] Signup error:", error)
         setErrors({ email: error.message })
         setIsLoading(false)
         return
