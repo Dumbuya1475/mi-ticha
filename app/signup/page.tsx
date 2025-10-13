@@ -89,9 +89,8 @@ export default function SignupPage() {
         // Create profile record in profiles table
         const { error: profileError } = await supabase.from("profiles").insert({
           id: data.user.id,
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
+          full_name: formData.name,
+          phone_number: formData.phone,
           role: "parent",
         })
 

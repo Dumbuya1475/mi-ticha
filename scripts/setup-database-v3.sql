@@ -61,9 +61,10 @@ TO authenticated
 USING (auth_user_id = auth.uid())
 WITH CHECK (auth_user_id = auth.uid());
 
--- Update other tables to ensure proper RLS
+-- Fixed DROP POLICY statements to match exact policy names being created
 -- Questions table
 DROP POLICY IF EXISTS "Students can view their own questions" ON questions;
+DROP POLICY IF EXISTS "Students can insert their own questions" ON questions;
 DROP POLICY IF EXISTS "Students can insert questions" ON questions;
 DROP POLICY IF EXISTS "Students can view own questions" ON questions;
 
@@ -91,6 +92,7 @@ WITH CHECK (
 
 -- Answers table
 DROP POLICY IF EXISTS "Users can view answers to their questions" ON answers;
+DROP POLICY IF EXISTS "Users can view answers" ON answers;
 DROP POLICY IF EXISTS "Users can insert answers" ON answers;
 DROP POLICY IF EXISTS "Users can update answer feedback" ON answers;
 
@@ -123,6 +125,7 @@ USING (
 
 -- Reading activities table
 DROP POLICY IF EXISTS "Students can view their own reading activities" ON reading_activities;
+DROP POLICY IF EXISTS "Students can manage their own reading activities" ON reading_activities;
 DROP POLICY IF EXISTS "Users can view own reading" ON reading_activities;
 DROP POLICY IF EXISTS "Users can manage own reading" ON reading_activities;
 
@@ -146,6 +149,7 @@ USING (
 
 -- Study sessions table
 DROP POLICY IF EXISTS "Students can view their own study sessions" ON study_sessions;
+DROP POLICY IF EXISTS "Students can manage their own study sessions" ON study_sessions;
 DROP POLICY IF EXISTS "Users can view own sessions" ON study_sessions;
 DROP POLICY IF EXISTS "Users can manage own sessions" ON study_sessions;
 
@@ -169,6 +173,7 @@ USING (
 
 -- Daily stats table
 DROP POLICY IF EXISTS "Students can view their own daily stats" ON daily_stats;
+DROP POLICY IF EXISTS "Students can manage their own daily stats" ON daily_stats;
 DROP POLICY IF EXISTS "Users can view own stats" ON daily_stats;
 DROP POLICY IF EXISTS "Users can manage own stats" ON daily_stats;
 
@@ -191,6 +196,8 @@ USING (
 );
 
 -- Words learned table
+DROP POLICY IF EXISTS "Students can view their own words" ON words_learned;
+DROP POLICY IF EXISTS "Students can manage their own words" ON words_learned;
 DROP POLICY IF EXISTS "Users can view own words" ON words_learned;
 DROP POLICY IF EXISTS "Users can manage own words" ON words_learned;
 
