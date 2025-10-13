@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Eye, EyeOff, GraduationCap } from "lucide-react"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { studentLogin } from "@/app/actions/student-auth"
 
 export default function StudentLoginPage() {
   const router = useRouter()
@@ -37,63 +37,19 @@ export default function StudentLoginPage() {
     setIsLoading(true)
 
     try {
-      const supabase = createBrowserClient()
+      const result = await studentLogin(username, password)
 
-      // Students use email format: parent_id+childname@miticha.internal
-      // But we'll search by name first to get the email
-      const { data: students, error: searchError } = await supabase
-        .from("students")
-        .select("id, name, auth_user_id")
-        .ilike("name", username)
-        .limit(5)
-
-      if (searchError) {
-        console.error("[v0] Search error:", searchError)
-        setError("Failed to find student")
-        setIsLoading(false)
-        return
-      }
-
-      if (!students || students.length === 0) {
-        setError("Student not found. Please check your username.")
-        setIsLoading(false)
-        return
-      }
-
-      // If multiple matches, try exact match first
-      let student = students.find((s) => s.name.toLowerCase() === username.toLowerCase())
-      if (!student) {
-        student = students[0] // Use first match
-      }
-
-      // Get the auth user email
-      const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(student.auth_user_id)
-
-      if (authError || !authUser) {
-        console.error("[v0] Auth user error:", authError)
-        setError("Login system error. Please contact your parent.")
-        setIsLoading(false)
-        return
-      }
-
-      // Now sign in with email and password
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: authUser.user.email!,
-        password: password,
-      })
-
-      if (signInError) {
-        console.error("[v0] Sign in error:", signInError)
-        setError("Incorrect password. Please try again.")
+      if (result.error) {
+        setError(result.error)
         setPassword("")
         setIsLoading(false)
         return
       }
 
-      console.log("[v0] Login successful for student:", student.name)
-
-      // Redirect to student home
-      router.push(`/student/${student.id}`)
+      if (result.success && result.studentId) {
+        console.log("[v0] Redirecting to student dashboard:", result.studentId)
+        router.push(`/student/${result.studentId}`)
+      }
     } catch (error) {
       console.error("[v0] Login error:", error)
       setError("An unexpected error occurred")
