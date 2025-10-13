@@ -8,6 +8,13 @@ The application is built with Next.js 15.5.4 using the App Router, TypeScript, a
 
 ## Recent Changes
 
+**October 13, 2025 - AI Implementation & Database Fix**
+- **Fixed "Parent profile not found" error**: Created database trigger that auto-creates parent profiles on signup
+- **Implemented Groq AI Integration**: Free AI service for Moe (the AI tutor) using Llama 3.1 70B
+- **Fixed chat API route**: Updated to use proper Groq SDK with `@ai-sdk/groq` package
+- **Added proper error handling**: Chat API returns clear error when API key is missing
+- **Database setup script**: Created `scripts/complete-setup-with-trigger.sql` with RLS policies and automatic profile creation
+
 **October 13, 2025 - Migrated from Vercel to Replit**
 - Configured Next.js to run on port 5000 with 0.0.0.0 host binding for Replit environment
 - Updated package.json scripts: `dev` and `start` commands now include `-p 5000 -H 0.0.0.0`
