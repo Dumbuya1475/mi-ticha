@@ -33,3 +33,4 @@ package-lock.json
 # crash dumps
 *.stackdump
 bash.exe.stackdump
+.replit
