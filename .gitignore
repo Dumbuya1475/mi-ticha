@@ -25,3 +25,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local/system artifacts
+# ignore accidental npm lockfile when using pnpm
+package-lock.json
+
+# crash dumps
+*.stackdump
+bash.exe.stackdump
