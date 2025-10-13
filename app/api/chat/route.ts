@@ -1,9 +1,23 @@
 import { streamText } from "ai"
+import { createGroq } from "@ai-sdk/groq"
 
 export const maxDuration = 30
 
 export async function POST(req: Request) {
   const { messages, mode, studentId } = await req.json()
+
+  const apiKey = process.env.GROQ_API_KEY
+
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({ 
+        error: "AI service not configured. Please add GROQ_API_KEY to environment variables." 
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    )
+  }
+
+  const groq = createGroq({ apiKey })
 
   const systemPrompts = {
     homework: `You are Moe, a friendly and patient AI tutor for Sierra Leone students aged 8-14. Your role is to:
@@ -49,10 +63,10 @@ This mode is handled separately - you won't be called in reading mode.`,
   }
 
   const result = streamText({
-    model: "groq/llama-3.1-70b-versatile",
+    model: groq("llama-3.1-70b-versatile"),
     system: systemPrompts[mode as keyof typeof systemPrompts] || systemPrompts.homework,
     messages,
   })
 
-  return result.toDataStreamResponse()
+  return result.toTextStreamResponse()
 }
