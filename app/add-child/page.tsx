@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Eye, EyeOff } from "lucide-react"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { createChildAccount } from "@/app/actions/manage-child"
 
 export default function AddChildPage() {
   const router = useRouter()
@@ -19,13 +19,13 @@ export default function AddChildPage() {
     name: "",
     age: "",
     grade: "",
-    pin: "",
-    confirmPin: "",
+    password: "",
+    confirmPassword: "",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
-  const [showPin, setShowPin] = useState(false)
-  const [showConfirmPin, setShowConfirmPin] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -42,16 +42,14 @@ export default function AddChildPage() {
       newErrors.grade = "Please select a grade"
     }
 
-    if (!formData.pin) {
-      newErrors.pin = "Please set a PIN for your child"
-    } else if (formData.pin.length < 4 || formData.pin.length > 6) {
-      newErrors.pin = "PIN must be 4-6 digits"
-    } else if (!/^\d+$/.test(formData.pin)) {
-      newErrors.pin = "PIN must contain only numbers"
+    if (!formData.password) {
+      newErrors.password = "Please set a password for your child"
+    } else if (formData.password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters"
     }
 
-    if (formData.pin !== formData.confirmPin) {
-      newErrors.confirmPin = "PINs do not match"
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match"
     }
 
     setErrors(newErrors)
@@ -68,41 +66,19 @@ export default function AddChildPage() {
     setIsLoading(true)
 
     try {
-      const supabase = createBrowserClient()
+      const result = await createChildAccount({
+        name: formData.name,
+        age: Number.parseInt(formData.age),
+        grade: formData.grade,
+        password: formData.password,
+      })
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
-        setErrors({ form: "You must be logged in to add a child" })
+      if (result.error) {
+        setErrors({ form: result.error })
         setIsLoading(false)
         return
       }
 
-      const bcrypt = await import("bcryptjs")
-      const pinHash = await bcrypt.hash(formData.pin, 10)
-
-      const { data, error } = await supabase
-        .from("students")
-        .insert({
-          parent_id: user.id,
-          name: formData.name,
-          age: Number.parseInt(formData.age),
-          grade_level: formData.grade,
-          pin_hash: pinHash,
-        })
-        .select()
-        .single()
-
-      if (error) {
-        console.error("[v0] Error adding child:", error)
-        setErrors({ form: "Failed to add child. Please try again." })
-        setIsLoading(false)
-        return
-      }
-
-      console.log("[v0] Child added successfully:", data)
       router.push("/dashboard")
     } catch (error) {
       console.error("[v0] Error:", error)
@@ -211,72 +187,66 @@ export default function AddChildPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pin" className="font-semibold text-base">
-                  Set a PIN (4-6 digits)
+                <Label htmlFor="password" className="font-semibold text-base">
+                  Set a Password
                 </Label>
-                <p className="text-muted-foreground text-sm">Your child will use this PIN to log in</p>
+                <p className="text-muted-foreground text-sm">Your child will use this password to log in</p>
                 <div className="relative">
                   <Input
-                    id="pin"
-                    type={showPin ? "text" : "password"}
-                    placeholder="Enter 4-6 digit PIN"
-                    value={formData.pin}
-                    onChange={(e) => handleChange("pin", e.target.value)}
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter password (min 6 characters)"
+                    value={formData.password}
+                    onChange={(e) => handleChange("password", e.target.value)}
                     className="h-12 pr-10 text-base"
-                    maxLength={6}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    aria-invalid={!!errors.pin}
-                    aria-describedby={errors.pin ? "pin-error" : undefined}
+                    aria-invalid={!!errors.password}
+                    aria-describedby={errors.password ? "password-error" : undefined}
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     className="absolute top-1/2 right-2 -translate-y-1/2"
-                    onClick={() => setShowPin(!showPin)}
+                    onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                {errors.pin && (
-                  <p id="pin-error" className="text-destructive text-sm">
-                    {errors.pin}
+                {errors.password && (
+                  <p id="password-error" className="text-destructive text-sm">
+                    {errors.password}
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPin" className="font-semibold text-base">
-                  Confirm PIN
+                <Label htmlFor="confirmPassword" className="font-semibold text-base">
+                  Confirm Password
                 </Label>
                 <div className="relative">
                   <Input
-                    id="confirmPin"
-                    type={showConfirmPin ? "text" : "password"}
-                    placeholder="Re-enter PIN"
-                    value={formData.confirmPin}
-                    onChange={(e) => handleChange("confirmPin", e.target.value)}
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Re-enter password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => handleChange("confirmPassword", e.target.value)}
                     className="h-12 pr-10 text-base"
-                    maxLength={6}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    aria-invalid={!!errors.confirmPin}
-                    aria-describedby={errors.confirmPin ? "confirmPin-error" : undefined}
+                    aria-invalid={!!errors.confirmPassword}
+                    aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     className="absolute top-1/2 right-2 -translate-y-1/2"
-                    onClick={() => setShowConfirmPin(!showConfirmPin)}
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
-                    {showConfirmPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                {errors.confirmPin && (
-                  <p id="confirmPin-error" className="text-destructive text-sm">
-                    {errors.confirmPin}
+                {errors.confirmPassword && (
+                  <p id="confirmPassword-error" className="text-destructive text-sm">
+                    {errors.confirmPassword}
                   </p>
                 )}
               </div>
