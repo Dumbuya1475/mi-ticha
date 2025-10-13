@@ -49,7 +49,7 @@ This mode is handled separately - you won't be called in reading mode.`,
   }
 
   const result = streamText({
-    model: "openai/gpt-4o-mini",
+    model: "groq/llama-3.1-70b-versatile",
     system: systemPrompts[mode as keyof typeof systemPrompts] || systemPrompts.homework,
     messages,
   })

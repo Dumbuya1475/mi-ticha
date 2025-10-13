@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const { studentId } = await req.json()
 
     const { text } = await generateText({
-      model: "openai/gpt-4o-mini",
+      model: "groq/llama-3.1-70b-versatile",
       prompt: `Generate ONE simple, fun sentence for an 8-14 year old Sierra Leone student to practice reading.
 
 Requirements:
