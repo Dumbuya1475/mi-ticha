@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -46,11 +47,26 @@ export default function LoginPage() {
 
     setIsLoading(true)
 
-    // TODO: Implement Supabase authentication
-    setTimeout(() => {
+    try {
+      const supabase = createBrowserClient()
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
+
+      if (error) {
+        setErrors({ password: error.message })
+        setIsLoading(false)
+        return
+      }
+
+      if (data.user) {
+        router.push("/dashboard")
+      }
+    } catch (error) {
+      setErrors({ password: "An unexpected error occurred. Please try again." })
       setIsLoading(false)
-      router.push("/dashboard")
-    }, 1000)
+    }
   }
 
   const handleChange = (field: string, value: string) => {

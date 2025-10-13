@@ -23,13 +23,15 @@ export function ErrorBoundary({ children }: { children: React.ReactNode }) {
       originalError.apply(console, args)
     }
 
-    // Prevent ServiceWorker registration entirely
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      Object.defineProperty(navigator, "serviceWorker", {
-        get() {
-          return undefined
-        },
-      })
+      const descriptor = Object.getOwnPropertyDescriptor(navigator, "serviceWorker")
+      if (descriptor && descriptor.configurable) {
+        Object.defineProperty(navigator, "serviceWorker", {
+          get() {
+            return undefined
+          },
+        })
+      }
     }
 
     // Handle unhandled promise rejections

@@ -1,42 +1,184 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Bell, LogOut, BookOpen, MessageSquare, Clock, TrendingUp } from "lucide-react"
+import { createBrowserClient } from "@/lib/supabase/client"
 
-// Mock data - will be replaced with Supabase data
-const mockChildren = [
-  {
-    id: "1",
-    name: "Aminata Kamara",
-    age: 10,
-    grade: "Primary 5",
-    totalSessions: 24,
-    hoursLearned: 12.5,
-    lastActive: "2 hours ago",
-    weeklyProgress: 85,
-  },
-  {
-    id: "2",
-    name: "Mohamed Sesay",
-    age: 12,
-    grade: "JSS 1",
-    totalSessions: 18,
-    hoursLearned: 9.2,
-    lastActive: "1 day ago",
-    weeklyProgress: 72,
-  },
-]
+interface Child {
+  id: string
+  name: string
+  age: number
+  grade: string
+  totalSessions: number
+  hoursLearned: number
+  lastActive: string
+  weeklyProgress: number
+}
 
-const mockStats = {
-  totalChildren: 2,
-  totalHours: 21.7,
-  totalSessions: 42,
-  averageProgress: 78,
+interface Stats {
+  totalChildren: number
+  totalHours: number
+  totalSessions: number
+  averageProgress: number
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const [children, setChildren] = useState<Child[]>([])
+  const [stats, setStats] = useState<Stats>({
+    totalChildren: 0,
+    totalHours: 0,
+    totalSessions: 0,
+    averageProgress: 0,
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [parentId, setParentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const supabase = createBrowserClient()
+
+        // Get current user
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError || !user) {
+          router.push("/login")
+          return
+        }
+
+        setParentId(user.id)
+
+        // Fetch children/students for this parent
+        const { data: studentsData, error: studentsError } = await supabase
+          .from("students")
+          .select("*")
+          .eq("parent_id", user.id)
+
+        if (studentsError) {
+          console.error("[v0] Error fetching students:", studentsError)
+          setIsLoading(false)
+          return
+        }
+
+        // Calculate stats for each child
+        const childrenWithStats = await Promise.all(
+          (studentsData || []).map(async (student) => {
+            // Get total sessions
+            const { count: sessionsCount } = await supabase
+              .from("study_sessions")
+              .select("*", { count: "exact", head: true })
+              .eq("student_id", student.id)
+
+            // Get total hours from study sessions
+            const { data: sessionsData } = await supabase
+              .from("study_sessions")
+              .select("duration_minutes")
+              .eq("student_id", student.id)
+
+            const totalMinutes = sessionsData?.reduce((sum, session) => sum + (session.duration_minutes || 0), 0) || 0
+            const hoursLearned = Math.round((totalMinutes / 60) * 10) / 10
+
+            // Get last activity
+            const { data: lastSession } = await supabase
+              .from("study_sessions")
+              .select("created_at")
+              .eq("student_id", student.id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .single()
+
+            const lastActive = lastSession ? formatLastActive(new Date(lastSession.created_at)) : "No activity yet"
+
+            // Calculate weekly progress (sessions in last 7 days vs target)
+            const weekAgo = new Date()
+            weekAgo.setDate(weekAgo.getDate() - 7)
+
+            const { count: weeklySessionsCount } = await supabase
+              .from("study_sessions")
+              .select("*", { count: "exact", head: true })
+              .eq("student_id", student.id)
+              .gte("created_at", weekAgo.toISOString())
+
+            const weeklyProgress = Math.min(Math.round(((weeklySessionsCount || 0) / 7) * 100), 100)
+
+            return {
+              id: student.id,
+              name: student.name,
+              age: student.age,
+              grade: student.grade,
+              totalSessions: sessionsCount || 0,
+              hoursLearned,
+              lastActive,
+              weeklyProgress,
+            }
+          }),
+        )
+
+        setChildren(childrenWithStats)
+
+        // Calculate overall stats
+        const totalSessions = childrenWithStats.reduce((sum, child) => sum + child.totalSessions, 0)
+        const totalHours = childrenWithStats.reduce((sum, child) => sum + child.hoursLearned, 0)
+        const averageProgress =
+          childrenWithStats.length > 0
+            ? Math.round(
+                childrenWithStats.reduce((sum, child) => sum + child.weeklyProgress, 0) / childrenWithStats.length,
+              )
+            : 0
+
+        setStats({
+          totalChildren: childrenWithStats.length,
+          totalHours: Math.round(totalHours * 10) / 10,
+          totalSessions,
+          averageProgress,
+        })
+
+        setIsLoading(false)
+      } catch (error) {
+        console.error("[v0] Error in fetchData:", error)
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [router])
+
+  function formatLastActive(date: Date): string {
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffHours < 1) return "Just now"
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
+    if (diffDays === 1) return "1 day ago"
+    return `${diffDays} days ago`
+  }
+
+  async function handleLogout() {
+    const supabase = createBrowserClient()
+    await supabase.auth.signOut()
+    router.push("/login")
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary/5 to-accent/5">
       {/* Header */}
@@ -53,7 +195,7 @@ export default function DashboardPage() {
                 <span className="sr-only">Notifications</span>
               </Link>
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-5 w-5" />
               <span className="sr-only">Logout</span>
             </Button>
@@ -75,7 +217,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-muted-foreground text-sm">Total Children</p>
-                  <p className="font-bold text-3xl">{mockStats.totalChildren}</p>
+                  <p className="font-bold text-3xl">{stats.totalChildren}</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                   <BookOpen className="h-6 w-6 text-primary" />
@@ -89,7 +231,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-muted-foreground text-sm">Total Hours</p>
-                  <p className="font-bold text-3xl">{mockStats.totalHours}</p>
+                  <p className="font-bold text-3xl">{stats.totalHours}</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary/10">
                   <Clock className="h-6 w-6 text-secondary" />
@@ -103,7 +245,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-muted-foreground text-sm">Total Sessions</p>
-                  <p className="font-bold text-3xl">{mockStats.totalSessions}</p>
+                  <p className="font-bold text-3xl">{stats.totalSessions}</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
                   <MessageSquare className="h-6 w-6 text-accent" />
@@ -117,7 +259,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-muted-foreground text-sm">Avg Progress</p>
-                  <p className="font-bold text-3xl">{mockStats.averageProgress}%</p>
+                  <p className="font-bold text-3xl">{stats.averageProgress}%</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                   <TrendingUp className="h-6 w-6 text-primary" />
@@ -138,56 +280,56 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {mockChildren.map((child) => (
-            <Card key={child.id} className="border-2 transition-shadow hover:shadow-lg">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-14 w-14 border-2 border-primary">
-                      <AvatarFallback className="bg-primary/10 font-bold text-lg text-primary">
-                        {child.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
+        {children.length > 0 ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            {children.map((child) => (
+              <Card key={child.id} className="border-2 transition-shadow hover:shadow-lg">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-14 w-14 border-2 border-primary">
+                        <AvatarFallback className="bg-primary/10 font-bold text-lg text-primary">
+                          {child.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <CardTitle className="text-xl">{child.name}</CardTitle>
+                        <CardDescription className="text-base">
+                          {child.age} years • {child.grade}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="font-semibold">
+                      {child.weeklyProgress}% this week
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4 grid grid-cols-3 gap-4 text-center">
                     <div>
-                      <CardTitle className="text-xl">{child.name}</CardTitle>
-                      <CardDescription className="text-base">
-                        {child.age} years • {child.grade}
-                      </CardDescription>
+                      <p className="font-bold text-2xl text-primary">{child.totalSessions}</p>
+                      <p className="text-muted-foreground text-xs">Sessions</p>
+                    </div>
+                    <div>
+                      <p className="font-bold text-2xl text-secondary">{child.hoursLearned}h</p>
+                      <p className="text-muted-foreground text-xs">Hours</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Last Active</p>
+                      <p className="font-semibold text-sm">{child.lastActive}</p>
                     </div>
                   </div>
-                  <Badge variant="secondary" className="font-semibold">
-                    {child.weeklyProgress}% this week
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4 grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="font-bold text-2xl text-primary">{child.totalSessions}</p>
-                    <p className="text-muted-foreground text-xs">Sessions</p>
-                  </div>
-                  <div>
-                    <p className="font-bold text-2xl text-secondary">{child.hoursLearned}h</p>
-                    <p className="text-muted-foreground text-xs">Hours</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Last Active</p>
-                    <p className="font-semibold text-sm">{child.lastActive}</p>
-                  </div>
-                </div>
-                <Button asChild variant="outline" className="w-full font-semibold bg-transparent">
-                  <Link href={`/dashboard/child/${child.id}`}>View Details</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {mockChildren.length === 0 && (
+                  <Button asChild variant="outline" className="w-full bg-transparent font-semibold">
+                    <Link href={`/dashboard/child/${child.id}`}>View Details</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
           <Card className="border-2 border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <BookOpen className="mb-4 h-16 w-16 text-muted-foreground" />

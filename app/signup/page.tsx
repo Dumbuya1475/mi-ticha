@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -63,12 +64,48 @@ export default function SignupPage() {
 
     setIsLoading(true)
 
-    // TODO: Implement Supabase authentication
-    // For now, simulate signup and redirect to add-child page
-    setTimeout(() => {
+    try {
+      const supabase = createBrowserClient()
+
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+          data: {
+            name: formData.name,
+            phone: formData.phone,
+          },
+        },
+      })
+
+      if (error) {
+        setErrors({ email: error.message })
+        setIsLoading(false)
+        return
+      }
+
+      if (data.user) {
+        // Create profile record in profiles table
+        const { error: profileError } = await supabase.from("profiles").insert({
+          id: data.user.id,
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          role: "parent",
+        })
+
+        if (profileError) {
+          console.error("[v0] Profile creation error:", profileError)
+        }
+
+        router.push("/add-child")
+      }
+    } catch (error) {
+      console.error("[v0] Signup error:", error)
+      setErrors({ email: "An unexpected error occurred. Please try again." })
       setIsLoading(false)
-      router.push("/add-child")
-    }, 1000)
+    }
   }
 
   const handleChange = (field: string, value: string) => {
