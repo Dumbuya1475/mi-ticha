@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { use, useEffect, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -31,6 +31,7 @@ interface Activity {
   duration: string
   date: string
   subject: string
+  timestamp: number
 }
 
 interface SubjectProgress {
@@ -39,7 +40,8 @@ interface SubjectProgress {
   sessions: number
 }
 
-export default function ChildDetailPage({ params }: { params: { id: string } }) {
+export default function ChildDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [child, setChild] = useState<ChildData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -49,10 +51,10 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
         const supabase = createBrowserClient()
 
         // Fetch student data
-        const { data: studentData, error: studentError } = await supabase
-          .from("students")
-          .select("*")
-          .eq("id", params.id)
+          const { data: studentData, error: studentError } = await supabase
+            .from("students")
+            .select("*")
+            .eq("id", id)
           .maybeSingle()
 
         if (studentError || !studentData) {
@@ -65,13 +67,13 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
         const { count: sessionsCount } = await supabase
           .from("study_sessions")
           .select("*", { count: "exact", head: true })
-          .eq("student_id", params.id)
+          .eq("student_id", id)
 
         // Get total hours
         const { data: sessionsData } = await supabase
           .from("study_sessions")
           .select("duration_minutes")
-          .eq("student_id", params.id)
+          .eq("student_id", id)
 
         const totalMinutes = sessionsData?.reduce((sum, session) => sum + (session.duration_minutes || 0), 0) || 0
         const hoursLearned = Math.round((totalMinutes / 60) * 10) / 10
@@ -79,13 +81,13 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
         // Get last activity
         const { data: lastSession } = await supabase
           .from("study_sessions")
-          .select("created_at")
-          .eq("student_id", params.id)
-          .order("created_at", { ascending: false })
+          .select("started_at")
+          .eq("student_id", id)
+          .order("started_at", { ascending: false })
           .limit(1)
           .maybeSingle()
 
-        const lastActive = lastSession ? formatLastActive(new Date(lastSession.created_at)) : "No activity yet"
+        const lastActive = lastSession && lastSession.started_at ? formatLastActive(new Date(lastSession.started_at)) : "No activity yet"
 
         // Calculate weekly progress
         const weekAgo = new Date()
@@ -94,8 +96,8 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
         const { count: weeklySessionsCount } = await supabase
           .from("study_sessions")
           .select("*", { count: "exact", head: true })
-          .eq("student_id", params.id)
-          .gte("created_at", weekAgo.toISOString())
+          .eq("student_id", id)
+          .gte("started_at", weekAgo.toISOString())
 
         const weeklyProgress = Math.min(Math.round(((weeklySessionsCount || 0) / 7) * 100), 100)
 
@@ -103,14 +105,14 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
         const { data: questionsData } = await supabase
           .from("questions")
           .select("*")
-          .eq("student_id", params.id)
+          .eq("student_id", id)
           .order("created_at", { ascending: false })
           .limit(2)
 
         const { data: readingData } = await supabase
           .from("reading_activities")
           .select("*")
-          .eq("student_id", params.id)
+          .eq("student_id", id)
           .order("created_at", { ascending: false })
           .limit(2)
 
@@ -122,39 +124,41 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
             duration: "N/A",
             date: formatDate(new Date(q.created_at)),
             subject: q.subject || "General",
+            timestamp: new Date(q.created_at).getTime(),
           })),
           ...(readingData || []).map((r) => ({
             id: r.id,
             type: "reading" as const,
-            title: "Reading Practice",
-            duration: `${r.duration_minutes || 0} min`,
+            title: r.title || "Reading Practice",
+            duration: `${r.duration_minutes || 0} min • ${r.comprehension_score || 0}%`,
             date: formatDate(new Date(r.created_at)),
-            subject: "English",
+            subject: "Reading",
+            timestamp: new Date(r.created_at).getTime(),
           })),
         ]
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .sort((a, b) => b.timestamp - a.timestamp)
           .slice(0, 4)
 
-        // Calculate subject progress
-        const { data: subjectStats } = await supabase
-          .from("daily_stats")
+        // Calculate subject progress from study sessions
+        const { data: subjectSessions } = await supabase
+          .from("study_sessions")
           .select("subject, questions_answered")
-          .eq("student_id", params.id)
+          .eq("student_id", id)
 
-        const subjectMap = new Map<string, { total: number; count: number }>()
-        subjectStats?.forEach((stat) => {
-          const subject = stat.subject || "General"
-          const current = subjectMap.get(subject) || { total: 0, count: 0 }
+        const subjectMap = new Map<string, { questions: number; sessions: number }>()
+        subjectSessions?.forEach((session) => {
+          const subject = session.subject || "General"
+          const current = subjectMap.get(subject) || { questions: 0, sessions: 0 }
           subjectMap.set(subject, {
-            total: current.total + (stat.questions_answered || 0),
-            count: current.count + 1,
+            questions: current.questions + (session.questions_answered || 0),
+            sessions: current.sessions + 1,
           })
         })
 
         const subjectProgress: SubjectProgress[] = Array.from(subjectMap.entries()).map(([subject, data]) => ({
           subject,
-          progress: Math.min(Math.round((data.total / (data.count * 10)) * 100), 100),
-          sessions: data.count,
+          progress: Math.min(Math.round(((data.questions || 0) / Math.max(data.sessions * 5, 1)) * 100), 100),
+          sessions: data.sessions,
         }))
 
         setChild({
@@ -173,6 +177,7 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
               : [
                   { subject: "Mathematics", progress: 0, sessions: 0 },
                   { subject: "English", progress: 0, sessions: 0 },
+                  { subject: "Reading", progress: 0, sessions: 0 },
                   { subject: "Science", progress: 0, sessions: 0 },
                 ],
         })
@@ -185,7 +190,7 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
     }
 
     fetchChildData()
-  }, [params.id])
+  }, [id])
 
   function formatLastActive(date: Date): string {
     const now = new Date()
@@ -354,7 +359,7 @@ export default function ChildDetailPage({ params }: { params: { id: string } }) 
 
         <div className="mt-8">
           <h2 className="mb-4 font-bold text-2xl">Questions Asked</h2>
-          <QuestionsList studentId={params.id} />
+          <QuestionsList studentId={id} />
         </div>
       </main>
     </div>

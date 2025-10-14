@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
+import Link from "next/link"
 
 export function Hero() {
   return (
@@ -8,18 +9,28 @@ export function Hero() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
           <div className="space-y-6">
             <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight">
-              Language<br />
-              mastery<br />
-              made easy!
+              Mi Ticha brings<br />
+              AI-powered learning<br />
+              to Sierra Leone kids
             </h1>
             <p className="text-lg text-white/90 max-w-lg">
-              Our innovative language programs make learning fun and effective for children of all ages. Start their language journey today!
+              Moe, our friendly AI tutor, supports homework, reading practice, and skill-building while parents track every milestone in a safe, local-first platform.
             </p>
-            <Button 
-              className="bg-amber-400 hover:bg-amber-500 text-black px-8 py-6 rounded-full text-lg font-semibold"
-            >
-              Enroll now!
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                asChild
+                className="bg-amber-400 hover:bg-amber-500 text-black px-8 py-6 rounded-full text-lg font-semibold"
+              >
+                <Link href="/signup">Parent sign up</Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="border-2 border-white/60 bg-white/10 text-white hover:bg-white/20 px-8 py-6 rounded-full text-lg font-semibold"
+              >
+                <Link href="/student-login">Student log in</Link>
+              </Button>
+            </div>
           </div>
           <div className="relative">
             {/* Decorative elements */}
@@ -30,8 +41,8 @@ export function Hero() {
             <div className="relative z-10 rounded-2xl overflow-hidden">
               <div className="aspect-[4/3] relative">
                 <Image
-                  src="/students-hero.png"
-                  alt="Students learning together"
+                  src="/assets/hero.jpg"
+                  alt="Mi Ticha students learning with Moe"
                   fill
                   className="object-cover"
                   priority

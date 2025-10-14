@@ -94,13 +94,16 @@ export default function SignupPage() {
       }
 
       if (data.user) {
-        // Create profile record in profiles table
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: data.user.id,
-          full_name: formData.name,
-          phone_number: formData.phone,
-          role: "parent",
-        })
+        // Create or update profile record to avoid duplicate key conflicts on retry
+        const { error: profileError } = await supabase.from("profiles").upsert(
+          {
+            id: data.user.id,
+            full_name: formData.name,
+            phone_number: formData.phone,
+            role: "parent",
+          },
+          { onConflict: "id" },
+        )
 
         if (profileError) {
           console.error("[v0] Profile creation error:", profileError)

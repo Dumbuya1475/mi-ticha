@@ -35,8 +35,10 @@ export async function updateSession(request: NextRequest) {
   const isParentProtectedPath = parentProtectedPaths.some((path) => request.nextUrl.pathname.startsWith(path))
 
   // Protected routes for students
+  const isStudentLoginPath = request.nextUrl.pathname === "/student-login"
   const studentProtectedPaths = ["/student"]
-  const isStudentProtectedPath = studentProtectedPaths.some((path) => request.nextUrl.pathname.startsWith(path))
+  const isStudentProtectedPath =
+    !isStudentLoginPath && studentProtectedPaths.some((path) => request.nextUrl.pathname.startsWith(path))
 
   if (!user && (isParentProtectedPath || isStudentProtectedPath)) {
     // Redirect to appropriate login page

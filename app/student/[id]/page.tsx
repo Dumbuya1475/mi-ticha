@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,8 @@ interface Student {
   grade_level: string
 }
 
-export default function StudentHomePage({ params }: { params: { id: string } }) {
+export default function StudentHomePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const router = useRouter()
   const [student, setStudent] = useState<Student | null>(null)
   const [stats, setStats] = useState({ streak: 0, totalSessions: 0 })
@@ -27,7 +28,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
       const studentId = localStorage.getItem("studentId")
 
       // First check localStorage for quick validation
-      if (!studentId || studentId !== params.id) {
+      if (!studentId || studentId !== id) {
         console.log("[v0] Student not authenticated in localStorage, redirecting to login")
         router.push("/student-login")
         return
@@ -53,7 +54,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
     }
 
     checkAuth()
-  }, [params.id, router])
+  }, [id, router])
 
   const loadStudentData = async () => {
     try {
@@ -63,7 +64,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
       const { data: studentData, error: studentError } = await supabase
         .from("students")
         .select("id, name, age, grade_level")
-        .eq("id", params.id)
+        .eq("id", id)
         .maybeSingle()
 
       if (studentError) {
@@ -88,43 +89,52 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
 
       setStudent(studentData)
 
-      // Calculate learning streak (consecutive days with activity)
-      const { data: recentQuestions } = await supabase
-        .from("questions")
-        .select("created_at")
-        .eq("student_id", params.id)
-        .order("created_at", { ascending: false })
-        .limit(30)
+      // Calculate learning streak (consecutive days with activity) using study sessions
+      const { data: recentSessions } = await supabase
+        .from("study_sessions")
+        .select("started_at")
+        .eq("student_id", id)
+        .order("started_at", { ascending: false })
+        .limit(60)
 
       let streak = 0
-      if (recentQuestions && recentQuestions.length > 0) {
+      const activityDates = new Set<number>()
+
+      if (recentSessions && recentSessions.length > 0) {
         const today = new Date()
         today.setHours(0, 0, 0, 0)
 
-        const activityDates = new Set(
-          recentQuestions.map((q) => {
-            const date = new Date(q.created_at)
-            date.setHours(0, 0, 0, 0)
-            return date.getTime()
-          }),
-        )
+        recentSessions.forEach((session) => {
+          if (!session.started_at) return
+          const date = new Date(session.started_at)
+          date.setHours(0, 0, 0, 0)
+          activityDates.add(date.getTime())
+        })
 
         let currentDate = today.getTime()
         while (activityDates.has(currentDate)) {
           streak++
-          currentDate -= 24 * 60 * 60 * 1000 // Go back one day
+          currentDate -= 24 * 60 * 60 * 1000
         }
       }
 
       // Calculate total sessions (distinct days with activity)
-      const { data: allQuestions } = await supabase.from("questions").select("created_at").eq("student_id", params.id)
+      const { data: allSessions } = await supabase
+        .from("study_sessions")
+        .select("started_at")
+        .eq("student_id", id)
 
-      const totalSessions = allQuestions
+      const totalSessions = allSessions
         ? new Set(
-            allQuestions.map((q) => {
-              const date = new Date(q.created_at)
-              return date.toDateString()
-            }),
+            allSessions
+              .map((session) => {
+                if (!session.started_at) {
+                  return null
+                }
+
+                return new Date(session.started_at).toDateString()
+              })
+              .filter((dateString): dateString is string => Boolean(dateString)),
           ).size
         : 0
 
@@ -144,7 +154,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary via-secondary to-accent">
+      <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#1e1b4b,_#5b21b6_45%,_#ec4899_85%)]">
         <p className="font-semibold text-lg text-white">Loading...</p>
       </div>
     )
@@ -155,7 +165,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-secondary to-accent">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1e1b4b,_#5b21b6_45%,_#ec4899_85%)]">
       {/* Header */}
       <header className="px-4 py-6">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
@@ -227,7 +237,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
             </CardHeader>
             <CardContent>
               <Button asChild size="lg" className="h-14 w-full bg-primary font-bold text-lg hover:bg-primary/90">
-                <Link href={`/student/${params.id}/chat`}>Start Chatting</Link>
+                <Link href={`/student/${id}/chat`}>Start Chatting</Link>
               </Button>
             </CardContent>
           </Card>
@@ -248,7 +258,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
                 size="lg"
                 className="h-14 w-full bg-accent font-bold text-lg text-white hover:bg-accent/90"
               >
-                <Link href={`/student/${params.id}/chat?mode=words`}>Learn Words</Link>
+                <Link href={`/student/${id}/chat?mode=pronunciation`}>Learn Words</Link>
               </Button>
             </CardContent>
           </Card>
@@ -271,7 +281,7 @@ export default function StudentHomePage({ params }: { params: { id: string } }) 
                 variant="secondary"
                 className="h-14 w-full bg-secondary font-bold text-lg text-white hover:bg-secondary/90"
               >
-                <Link href={`/student/${params.id}/reading`}>Start Reading</Link>
+                <Link href={`/student/${id}/reading`}>Start Reading</Link>
               </Button>
             </CardContent>
           </Card>

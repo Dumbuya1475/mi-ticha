@@ -1,28 +1,130 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { use, useCallback, useEffect, useRef, useState } from "react"
+import type { ChangeEvent, FormEvent } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Send, Sparkles, Volume2, BookOpen, Calculator } from "lucide-react"
-import { useChat } from "ai"
+import { ArrowLeft, Send, Volume2, BookOpen, Calculator, Sparkles } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
 type ActivityMode = "homework" | "pronunciation" | "reading"
 
-export default function ChatWithMoePage({ params }: { params: { id: string } }) {
+type ChatMessage = {
+  id: string
+  role: "user" | "assistant"
+  content: string
+}
+
+interface UseSimpleChatOptions {
+  api: string
+  body?: Record<string, unknown>
+  onFinish?: (message: ChatMessage) => Promise<void> | void
+}
+
+function useSimpleChat({ api, body, onFinish }: UseSimpleChatOptions) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const messagesRef = useRef<ChatMessage[]>([])
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  const handleInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setInput(event.target.value)
+  }, [])
+
+  const handleSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const trimmed = input.trim()
+      if (!trimmed) {
+        return
+      }
+
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+      }
+
+      setMessages((prev) => [...prev, userMessage])
+      setInput("")
+      setIsLoading(true)
+
+      try {
+        const response = await fetch(api, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...(body || {}),
+            messages: [...messagesRef.current, userMessage].map(({ role, content }) => ({ role, content })),
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Chat request failed with status ${response.status}`)
+        }
+
+        const assistantContent =
+          (await response.text()).trim() || "I'm here, but I couldn't come up with an answer. Please try again."
+
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: assistantContent,
+        }
+
+        setMessages((prev) => [...prev, assistantMessage])
+
+        if (onFinish) {
+          await onFinish(assistantMessage)
+        }
+      } catch (error) {
+        console.error("[v0] Chat error:", error)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-error-${Date.now()}`,
+            role: "assistant",
+            content: "Oops! Something went wrong. Please try asking again in a moment.",
+          },
+        ])
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [api, body, input, onFinish],
+  )
+
+  return {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    setMessages,
+  }
+}
+
+export default function ChatWithMoePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<ActivityMode>("homework")
   const [readingSentence, setReadingSentence] = useState<string>("")
   const [isGeneratingSentence, setIsGeneratingSentence] = useState(false)
+  const searchParams = useSearchParams()
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useSimpleChat({
     api: "/api/chat",
     body: {
-      studentId: params.id,
+      studentId: id,
       mode,
     },
     onFinish: async (message) => {
@@ -39,9 +141,10 @@ export default function ChatWithMoePage({ params }: { params: { id: string } }) 
             const { data: questionData, error: questionError } = await supabase
               .from("questions")
               .insert({
-                student_id: params.id,
+                student_id: id,
                 question_text: lastUserMessage.content,
                 question_type: mode === "pronunciation" ? "word" : "other",
+                subject: mode === "pronunciation" ? "Pronunciation" : "Homework",
                 input_method: "text",
                 avatar_used: "moe",
               })
@@ -54,6 +157,22 @@ export default function ChatWithMoePage({ params }: { params: { id: string } }) 
                 question_id: questionData.id,
                 answer_text: message.content,
               })
+
+              // Log a short study session for streak tracking
+              const subjectLabel = mode === "pronunciation" ? "Pronunciation" : "Homework"
+              const { error: sessionLogError } = await supabase.from("study_sessions").insert({
+                student_id: id,
+                subject: subjectLabel,
+                duration_minutes: 1,
+                questions_answered: 1,
+                questions_correct: 0,
+              })
+
+              if (sessionLogError) {
+                console.error("[v0] Error logging study session:", sessionLogError)
+              }
+            } else if (questionError) {
+              console.error("[v0] Error inserting question:", questionError)
             }
           }
         } catch (error) {
@@ -90,13 +209,20 @@ export default function ChatWithMoePage({ params }: { params: { id: string } }) 
     ])
   }, [mode, setMessages])
 
+  useEffect(() => {
+    const modeParam = searchParams.get("mode")
+    if (modeParam && ["homework", "pronunciation", "reading"].includes(modeParam) && modeParam !== mode) {
+      setMode(modeParam as ActivityMode)
+    }
+  }, [searchParams, mode])
+
   const generateReadingSentence = async () => {
     setIsGeneratingSentence(true)
     try {
       const response = await fetch("/api/generate-sentence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: params.id }),
+        body: JSON.stringify({ studentId: id }),
       })
       const data = await response.json()
       setReadingSentence(data.sentence)
@@ -122,7 +248,7 @@ export default function ChatWithMoePage({ params }: { params: { id: string } }) 
       <header className="border-b bg-white/80 px-4 py-4 backdrop-blur-sm">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <Button variant="ghost" asChild>
-            <Link href={`/student/${params.id}`}>
+            <Link href={`/student/${id}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back
             </Link>

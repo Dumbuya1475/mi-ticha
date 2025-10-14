@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { use, useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Clock, CheckCircle2, XCircle } from "lucide-react"
+import { ArrowLeft, Clock, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 // Sample reading passages
@@ -24,7 +25,13 @@ interface ReadingPassage {
 
 type ReadingStage = "select" | "reading" | "questions" | "results"
 
-export default function ReadingPracticePage({ params }: { params: { id: string } }) {
+const readingIllustration = "/assets/img4.png"
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
+const estimateReadingMinutes = (text: string) => Math.max(1, Math.ceil(countWords(text) / 120) || 1)
+
+export default function ReadingPracticePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [stage, setStage] = useState<ReadingStage>("select")
   const [passages, setPassages] = useState<ReadingPassage[]>([])
   const [selectedPassage, setSelectedPassage] = useState<ReadingPassage | null>(null)
@@ -43,14 +50,32 @@ export default function ReadingPracticePage({ params }: { params: { id: string }
       const supabase = createBrowserClient()
 
       // Fetch reading passages from database
-      const { data, error } = await supabase.from("reading_passages").select("*").order("level", { ascending: true })
+      const { data, error } = await supabase.from("reading_passages").select("*").order("created_at", { ascending: true })
 
       if (error) {
         console.error("[v0] Error loading passages:", error)
         // If table doesn't exist yet, use sample data
         setPassages(getSamplePassages())
       } else if (data && data.length > 0) {
-        setPassages(data)
+        const fallbackPassages = getSamplePassages()
+        const mappedPassages: ReadingPassage[] = data.map((passage, index) => {
+          const fallback = fallbackPassages[index % fallbackPassages.length]
+          const difficulty = (passage as any).difficulty_level || (passage as any).level || fallback.level
+          const content = (passage as any).text || (passage as any).content || fallback.text
+          const questions = Array.isArray((passage as any).questions) && (passage as any).questions.length > 0
+            ? (passage as any).questions
+            : fallback.questions
+
+          return {
+            id: passage.id,
+            title: passage.title || fallback.title,
+            level: typeof difficulty === "string" ? capitalizeFirstLetter(difficulty) : fallback.level,
+            text: content,
+            questions,
+          }
+        })
+
+        setPassages(mappedPassages)
       } else {
         // No passages in database, use sample data
         setPassages(getSamplePassages())
@@ -62,6 +87,8 @@ export default function ReadingPracticePage({ params }: { params: { id: string }
       setIsLoading(false)
     }
   }
+
+  const capitalizeFirstLetter = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value)
 
   // Sample passages as fallback
   const getSamplePassages = (): ReadingPassage[] => [
@@ -186,18 +213,33 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
 
     try {
       const supabase = createBrowserClient()
+  const durationMinutes = Math.max(1, Math.round(timeElapsed / 60) || 1)
+  const totalWords = countWords(selectedPassage.text)
 
-      await supabase.from("reading_activities").insert({
-        student_id: params.id,
-        passage_id: selectedPassage.id,
-        time_spent_seconds: timeElapsed,
+      const { error: readingError } = await supabase.from("reading_activities").insert({
+        student_id: id,
+        passage_id: isUuid(selectedPassage.id) ? selectedPassage.id : null,
+        title: selectedPassage.title,
+        duration_minutes: durationMinutes,
         comprehension_score: Math.round((correctCount / selectedPassage.questions.length) * 100),
-        answers_data: {
-          answers: answers,
-          correct: correctCount,
-          total: selectedPassage.questions.length,
-        },
+        words_read: totalWords,
       })
+
+      if (readingError) {
+        throw readingError
+      }
+
+      const { error: sessionError } = await supabase.from("study_sessions").insert({
+        student_id: id,
+        subject: "Reading",
+        duration_minutes: durationMinutes,
+        questions_answered: selectedPassage.questions.length,
+        questions_correct: correctCount,
+      })
+
+      if (sessionError) {
+        throw sessionError
+      }
 
       console.log("[v0] Reading session saved successfully")
     } catch (error) {
@@ -228,7 +270,7 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
       <header className="border-b bg-white/80 px-4 py-4 backdrop-blur-sm">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <Button variant="ghost" asChild>
-            <Link href={`/student/${params.id}`}>
+            <Link href={`/student/${id}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back
             </Link>
@@ -248,10 +290,47 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
       <main className="mx-auto max-w-4xl px-4 py-8">
         {/* Select Passage Stage */}
         {stage === "select" && (
-          <div>
-            <div className="mb-8 text-center">
-              <h2 className="mb-2 font-bold text-3xl">Choose a Story to Read</h2>
-              <p className="text-muted-foreground text-lg">Pick a story and test your reading comprehension!</p>
+          <div className="space-y-8">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(240px,320px)]">
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/90 via-primary/80 to-secondary/80 p-8 text-white shadow-xl">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_65%)]" />
+                <div className="relative z-10 space-y-5">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold">
+                    <Sparkles className="h-4 w-4" />
+                    Reading Adventure Mode
+                  </div>
+                  <div className="space-y-3">
+                    <h2 className="font-black text-3xl leading-tight sm:text-4xl">Pick a story, earn stars, and grow your reading power!</h2>
+                    <p className="text-white/90 text-lg">
+                      Each story unlocks questions and fun challenges. Finish a passage to keep your streak alive and make Moe proud!
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-white/15 p-4">
+                      <h3 className="flex items-center gap-2 font-semibold text-lg">
+                        <BookOpen className="h-5 w-5" /> Story Library
+                      </h3>
+                      <p className="mt-1 text-sm text-white/80">Select any level and race the timer while you read.</p>
+                    </div>
+                    <div className="rounded-2xl bg-white/15 p-4">
+                      <h3 className="flex items-center gap-2 font-semibold text-lg">
+                        <Trophy className="h-5 w-5" /> Earn Streak Points
+                      </h3>
+                      <p className="mt-1 text-sm text-white/80">Complete a passage daily to boost your streak counter.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="relative min-h-[260px] overflow-hidden rounded-3xl border-4 border-white/70 bg-white shadow-xl">
+                <Image
+                  src={readingIllustration}
+                  alt="Illustration of a child reading a storybook"
+                  fill
+                  sizes="(min-width: 1024px) 320px, 60vw"
+                  className="object-cover"
+                  priority
+                />
+              </div>
             </div>
 
             {passages.length === 0 ? (
@@ -261,18 +340,25 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
             ) : (
               <div className="grid gap-6 md:grid-cols-2">
                 {passages.map((passage) => (
-                  <Card key={passage.id} className="border-2 transition-shadow hover:shadow-lg">
+                  <Card key={passage.id} className="group border-2 border-border/60 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-2xl">
                     <CardHeader>
-                      <div className="mb-2 flex items-center justify-between">
-                        <CardTitle className="text-xl">{passage.title}</CardTitle>
-                        <Badge variant="outline">{passage.level}</Badge>
+                      <div className="mb-3 flex items-center justify-between">
+                        <CardTitle className="font-semibold text-xl">{passage.title}</CardTitle>
+                        <Badge className="border-none bg-primary/10 px-3 py-1 font-semibold text-primary">{passage.level}</Badge>
                       </div>
-                      <CardDescription className="text-base">
-                        {passage.questions.length} comprehension questions
+                      <CardDescription className="text-base text-muted-foreground">
+                        {passage.questions.length} comprehension questions • {estimateReadingMinutes(passage.text)} min read
                       </CardDescription>
                     </CardHeader>
-                    <CardContent>
-                      <Button onClick={() => handleSelectPassage(passage)} className="w-full font-semibold" size="lg">
+                    <CardContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Explore themes of teamwork, courage, and real-life adventures inspired by Sierra Leone.
+                      </p>
+                      <Button
+                        onClick={() => handleSelectPassage(passage)}
+                        className="w-full font-semibold"
+                        size="lg"
+                      >
                         Start Reading
                       </Button>
                     </CardContent>
@@ -390,7 +476,7 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span>Your Score</span>
                     <span className="font-semibold">
@@ -398,12 +484,15 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
                     </span>
                   </div>
                   <Progress value={(score / selectedPassage.questions.length) * 100} className="h-3" />
-                </div>
-
-                <div className="rounded-lg bg-muted p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground text-sm">Time Taken</span>
-                    <span className="font-semibold">{formatTime(timeElapsed)}</span>
+                  <div className="grid gap-3 rounded-lg bg-muted p-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Words Read</p>
+                      <p className="font-semibold text-lg">{countWords(selectedPassage.text)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-sm">Time Taken</p>
+                      <p className="font-semibold text-lg">{formatTime(timeElapsed)}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -435,7 +524,7 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
                     Try Another Story
                   </Button>
                   <Button asChild className="flex-1 font-semibold">
-                    <Link href={`/student/${params.id}`}>Back to Home</Link>
+                    <Link href={`/student/${id}`}>Back to Home</Link>
                   </Button>
                 </div>
               </CardContent>
