@@ -99,7 +99,7 @@ export default function MathSolvingPage({ params }: { params: Promise<{ id: stri
   const [userAnswer, setUserAnswer] = useState("")
   const [problemsSolved, setProblemsSolved] = useState(15)
   const [showCelebration, setShowCelebration] = useState(false)
-  const celebrationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
@@ -127,8 +127,8 @@ export default function MathSolvingPage({ params }: { params: Promise<{ id: stri
     }
 
     if (parsed === PROBLEM.answer) {
-      setShowCelebration(true)
-      setProblemsSolved((prev) => prev + 1)
+  setShowCelebration(true)
+  setProblemsSolved((prev) => prev + 1)
       celebrationTimeoutRef.current = setTimeout(() => {
         setShowCelebration(false)
         setCurrentView("success")
@@ -366,7 +366,7 @@ export default function MathSolvingPage({ params }: { params: Promise<{ id: stri
           </button>
           <button
             type="button"
-            onClick={() => alert("We&apos;ll add more problems soon!")}
+            onClick={() => alert("We'll add more problems soon!")}
             className="rounded-xl bg-gray-100 py-3 font-semibold text-gray-800 transition hover:bg-gray-200"
           >
             Skip This One

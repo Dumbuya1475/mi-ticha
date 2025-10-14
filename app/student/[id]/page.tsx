@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { MessageSquare, BookOpen, Trophy, Clock, LogOut, Volume2 } from "lucide-react"
+import { MessageSquare, BookOpen, Trophy, Clock, LogOut, Volume2, Calculator } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 interface Student {
@@ -223,7 +223,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
           <h2 className="mb-4 text-center font-bold text-3xl text-white">What do you want to do today?</h2>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {/* Chat with Moe Card */}
           <Card className="group border-4 border-white/20 bg-white transition-all hover:scale-105 hover:shadow-2xl">
             <CardHeader className="text-center">
@@ -263,8 +263,29 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
             </CardContent>
           </Card>
 
+          <Card className="group border-4 border-white/20 bg-white transition-all hover:scale-105 hover:shadow-2xl md:col-span-2 xl:col-span-1">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600">
+                <Calculator className="h-12 w-12 text-white" />
+              </div>
+              <CardTitle className="font-bold text-2xl">Solve Math Problems</CardTitle>
+              <CardDescription className="text-base leading-relaxed">
+                Moe will show you each step so math feels easy. Practice, check your work, and celebrate wins!
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                asChild
+                size="lg"
+                className="h-14 w-full bg-emerald-500 font-bold text-lg text-white hover:bg-emerald-600"
+              >
+                <Link href={`/student/${id}/math`}>Start Solving</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Reading Practice Card */}
-          <Card className="group border-4 border-white/20 bg-white transition-all hover:scale-105 hover:shadow-2xl md:col-span-2">
+          <Card className="group border-4 border-white/20 bg-white transition-all hover:scale-105 hover:shadow-2xl md:col-span-2 xl:col-span-3">
             <CardHeader className="text-center">
               <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-secondary to-secondary/70">
                 <BookOpen className="h-12 w-12 text-white" />
