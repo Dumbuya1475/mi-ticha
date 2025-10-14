@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error("Supabase credentials are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,176 +18,241 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing word or studentId" }, { status: 400 })
     }
 
-    const cleanWord = word.trim().toLowerCase()
+    const cleanWord = String(word).trim().toLowerCase()
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    const wordDetails = {
-      word: cleanWord,
-      pronunciation: generatePronunciation(cleanWord),
-      definition: generateDefinition(cleanWord),
-      simpleDefinition: generateSimpleDefinition(cleanWord),
-      example: generateExample(cleanWord),
-      memoryTip: generateMemoryTip(cleanWord),
-      relatedWords: getRelatedWords(cleanWord),
-      difficulty: determineDifficulty(cleanWord),
-      image: getEmojiForWord(cleanWord),
+    if (!cleanWord) {
+      return NextResponse.json({ error: "Word cannot be empty" }, { status: 400 })
     }
 
-    const { error: insertError } = await supabase.from("word_learning_activities").insert({
-      student_id: studentId,
-      word: cleanWord,
-      learned: false,
-      pronunciation: wordDetails.pronunciation,
-      definition: wordDetails.definition,
-      example: wordDetails.example,
-    })
+    const dictionaryEntry = await fetchDictionaryEntry(cleanWord)
 
-    if (insertError) {
-      console.error("[v0] Error logging word activity:", insertError)
+    if (!dictionaryEntry) {
       return NextResponse.json(
-        { error: "Failed to save word learning activity. Please make sure you've set up the database tables in your Supabase dashboard." },
-        { status: 500 }
+        {
+          error: "We couldn't find that word in the dictionary. Try a different word or double-check the spelling.",
+        },
+        { status: 404 },
       )
     }
 
-    return NextResponse.json({ wordDetails })
+    const {
+      data: existingRow,
+      error: existingError,
+    } = await supabase
+      .from("words_learned")
+      .select("id, mastered, times_reviewed, metadata")
+      .eq("student_id", studentId)
+      .eq("word", dictionaryEntry.word)
+      .maybeSingle()
+
+    if (existingError) {
+      console.error("[v0] Failed to load existing word record:", existingError)
+      return NextResponse.json({ error: "Unable to save this word right now" }, { status: 500 })
+    }
+
+    const timesReviewed = (existingRow?.times_reviewed || 0) + 1
+    const mastered = existingRow?.mastered ?? false
+
+    const upsertPayload = {
+      student_id: studentId,
+      word: dictionaryEntry.word,
+      definition: dictionaryEntry.definition,
+      example_sentence: dictionaryEntry.example,
+      pronunciation: dictionaryEntry.pronunciation,
+      mastered,
+      times_reviewed: timesReviewed,
+      last_reviewed_at: new Date().toISOString(),
+      metadata: {
+        ...(existingRow?.metadata as Record<string, unknown> | null),
+        simpleDefinition: dictionaryEntry.simpleDefinition,
+        memoryTip: dictionaryEntry.memoryTip,
+        relatedWords: dictionaryEntry.relatedWords,
+        difficulty: dictionaryEntry.difficulty,
+        audioUrl: dictionaryEntry.audioUrl,
+      },
+    }
+
+    const { error: upsertError } = await supabase.from("words_learned").upsert(upsertPayload, {
+      onConflict: "student_id,word",
+    })
+
+    if (upsertError) {
+      console.error("[v0] Failed to upsert word:", upsertError)
+      return NextResponse.json({ error: "Unable to save this word right now" }, { status: 500 })
+    }
+
+    const { error: logError } = await supabase.from("word_learning_sessions").insert({
+      student_id: studentId,
+      word: dictionaryEntry.word,
+      status: "started",
+      payload: dictionaryEntry,
+    })
+
+    if (logError) {
+      console.error("[v0] Failed to log word learning session:", logError)
+    }
+
+    return NextResponse.json({
+      wordDetails: {
+        ...dictionaryEntry,
+        timesReviewed,
+        alreadyMastered: mastered,
+      },
+    })
   } catch (error) {
-    console.error("[v0] Error in learn-word API:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("[v0] Error in learn-word POST:", error)
+    return NextResponse.json({ error: "Something went wrong fetching that word." }, { status: 500 })
   }
 }
 
-function generatePronunciation(word: string): string {
-  const vowels = /[aeiou]/gi
-  const syllables = word.match(/[^aeiou]*[aeiou]+/gi) || [word]
-  return syllables.join("-")
+export async function PATCH(request: NextRequest) {
+  try {
+    const { word, studentId, outcome } = await request.json()
+
+    if (!word || !studentId || !outcome) {
+      return NextResponse.json({ error: "Missing word, studentId, or outcome" }, { status: 400 })
+    }
+
+    const cleanWord = String(word).trim().toLowerCase()
+
+    const { data: existingRow, error: fetchError } = await supabase
+      .from("words_learned")
+      .select("id, mastered, times_reviewed, metadata")
+      .eq("student_id", studentId)
+      .eq("word", cleanWord)
+      .maybeSingle()
+
+    if (fetchError) {
+      console.error("[v0] Failed to load word for update:", fetchError)
+      return NextResponse.json({ error: "Unable to update this word right now" }, { status: 500 })
+    }
+
+    if (!existingRow) {
+      return NextResponse.json({ error: "Word not found for that student" }, { status: 404 })
+    }
+
+    const timesReviewed = (existingRow.times_reviewed || 0) + 1
+    const mastered = outcome === "mastered" ? true : existingRow.mastered
+
+    const { error: updateError } = await supabase
+      .from("words_learned")
+      .update({
+        times_reviewed: timesReviewed,
+        last_reviewed_at: new Date().toISOString(),
+        mastered,
+      })
+      .eq("id", existingRow.id)
+
+    if (updateError) {
+      console.error("[v0] Failed to update word status:", updateError)
+      return NextResponse.json({ error: "Unable to update this word" }, { status: 500 })
+    }
+
+    const { error: logError } = await supabase.from("word_learning_sessions").insert({
+      student_id: studentId,
+      word: cleanWord,
+      status: outcome === "mastered" ? "mastered" : "needs_review",
+      payload: { outcome },
+    })
+
+    if (logError) {
+      console.error("[v0] Failed to log outcome:", logError)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("[v0] Error in learn-word PATCH:", error)
+    return NextResponse.json({ error: "Something went wrong saving your progress." }, { status: 500 })
+  }
 }
 
-function generateDefinition(word: string): string {
-  const commonDefinitions: { [key: string]: string } = {
-    cat: "A small furry animal that people often keep as a pet. Cats have sharp claws, whiskers, and usually say 'meow'.",
-    dog: "A friendly animal that people keep as a pet. Dogs are loyal companions who wag their tails when they're happy and like to play.",
-    tree: "A large plant with a wooden trunk and branches covered with leaves. Trees grow tall over many years and provide shade and homes for animals.",
-    water: "A clear liquid that falls from the sky as rain and fills rivers, lakes, and oceans. All living things need water to survive.",
-    sun: "The bright star in the sky that gives us light and warmth during the day. The sun is so bright that we should never look directly at it.",
-    book: "A set of written or printed pages fastened together inside covers. Books contain stories, information, or pictures that we can read and learn from.",
-    apple: "A round fruit that grows on trees. Apples can be red, green, or yellow and taste sweet or sometimes a bit sour.",
-    flower: "The colorful part of a plant that often smells nice. Flowers come in many shapes and colors and can grow in gardens or wild places.",
-    star: "A tiny bright point of light you see in the night sky. Stars are actually huge balls of burning gas very far away from Earth.",
-    heart: "The organ inside your chest that pumps blood through your body. We also use the word heart to talk about love and feelings.",
+async function fetchDictionaryEntry(word: string) {
+  try {
+    const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`)
+
+    if (!response.ok) {
+      return null
+    }
+
+    const data = (await response.json()) as DictionaryResult[]
+
+    if (!Array.isArray(data) || data.length === 0) {
+      return null
+    }
+
+    const entry = data[0]
+    const meaning = entry.meanings?.[0]
+    const definition = meaning?.definitions?.[0]
+
+    if (!definition?.definition) {
+      return null
+    }
+
+    const synonyms = (meaning?.synonyms ?? []).slice(0, 6)
+    const simplifiedDefinition = definition.definition.length > 120
+      ? `${definition.definition.slice(0, 117)}...`
+      : definition.definition
+
+    const pronunciation = entry.phonetic || entry.phonetics?.find((item) => item.text)?.text || word
+    const audioUrl = entry.phonetics?.find((item) => item.audio)?.audio
+    const example = definition.example || meaning?.definitions?.find((def) => def.example)?.example || ""
+
+    return {
+      word: entry.word?.toLowerCase() ?? word,
+      pronunciation,
+      definition: definition.definition,
+      simpleDefinition: simplifiedDefinition,
+      example,
+      memoryTip: buildMemoryTip(entry.word ?? word),
+      relatedWords: synonyms.length > 0 ? synonyms : buildFallbackRelatedWords(word),
+      difficulty: determineDifficulty(word),
+      audioUrl,
+    }
+  } catch (error) {
+    console.error("[v0] Dictionary lookup failed:", error)
+    return null
+  }
+}
+
+function buildMemoryTip(word: string) {
+  const base = word.slice(0, 3)
+  return `Remember: "${word}" starts with "${base}" – say it slowly and clap the syllables to lock it in!`
+}
+
+function buildFallbackRelatedWords(word: string) {
+  if (word.length <= 4) {
+    return ["spell", "say", "use", "practice"]
   }
 
-  return (
-    commonDefinitions[word] ||
-    `${capitalizeFirst(word)} is an interesting word that represents an important concept. It refers to something you might encounter in everyday life or in your studies.`
-  )
-}
-
-function generateSimpleDefinition(word: string): string {
-  const simpleDefinitions: { [key: string]: string } = {
-    cat: "A small furry pet animal that says meow",
-    dog: "A friendly pet animal that barks and wags its tail",
-    tree: "A big plant with a trunk and branches",
-    water: "The liquid we drink to stay alive",
-    sun: "The bright ball of light in the sky during the day",
-    book: "Pages with words and pictures to read",
-    apple: "A round fruit that grows on trees",
-    flower: "The pretty, colorful part of a plant",
-    star: "A tiny bright light in the night sky",
-    heart: "The part of your body that pumps blood",
+  if (word.length <= 7) {
+    return ["meaning", "practice", "sentence", "remember"]
   }
 
-  return simpleDefinitions[word] || `${capitalizeFirst(word)} - a word that describes something you can learn about`
+  return ["definition", "study", "explain", "share"]
 }
 
-function generateExample(word: string): string {
-  const examples: { [key: string]: string } = {
-    cat: "My cat loves to sleep in the warm sunshine by the window.",
-    dog: "The dog wagged its tail happily when its owner came home from school.",
-    tree: "We sat under the big mango tree to stay cool on a hot afternoon.",
-    water: "After playing football, I drank a glass of cold water.",
-    sun: "The sun rises in the east every morning and sets in the west.",
-    book: "I read an exciting book about adventures in the forest.",
-    apple: "She picked a ripe red apple from the tree and took a bite.",
-    flower: "The beautiful flower smelled sweet and attracted colorful butterflies.",
-    star: "At night, we looked up and counted the twinkling stars in the sky.",
-    heart: "When I exercise, I can feel my heart beating faster in my chest.",
-  }
-
-  return examples[word] || `I learned the word "${word}" today, and now I can use it in my writing.`
-}
-
-function generateMemoryTip(word: string): string {
-  const tips: { [key: string]: string } = {
-    cat: "Think of a CAT wearing a CAP - both start with 'ca' and cats are curious creatures!",
-    dog: "DOG spelled backwards is GOD - dogs are man's best friend and very loyal!",
-    tree: "Remember: Trees have THREE main parts - roots, trunk, and branches!",
-    water: "WATER starts with 'W' like WAVE - water makes waves in the ocean!",
-    sun: "The SUN is like a big yellow ball - and SUN rhymes with FUN because sunny days are fun!",
-    book: "A BOOK has two O's in the middle, like the two covers that hold the pages!",
-    apple: "An APPLE a day keeps the doctor away - a famous saying to help you remember!",
-    flower: "FLOWER has the word FLOW in it - flowers flow in the breeze!",
-    star: "STAR starts with ST like STAY - stars stay in the sky at night!",
-    heart: "Your HEART is at the center of your chest, just like it's at the center of love!",
-  }
-
-  return (
-    tips[word] ||
-    `Break "${word}" into smaller parts and say it slowly. Then use it in a sentence you create yourself!`
-  )
-}
-
-function getRelatedWords(word: string): string[] {
-  const commonRelatedWords: { [key: string]: string[] } = {
-    cat: ["kitten", "pet", "animal", "meow"],
-    dog: ["puppy", "pet", "animal", "bark"],
-    tree: ["plant", "forest", "leaf", "branch"],
-    water: ["liquid", "ocean", "river", "drink"],
-    sun: ["star", "light", "sky", "day"],
-    book: ["read", "library", "story", "page"],
-    apple: ["fruit", "tree", "red", "sweet"],
-    flower: ["garden", "bloom", "petal", "plant"],
-    star: ["night", "sky", "twinkle", "space"],
-    heart: ["love", "organ", "beat", "chest"],
-  }
-
-  return commonRelatedWords[word] || ["learn", "study", "practice", "understand"]
-}
-
-function determineDifficulty(word: string): string {
+function determineDifficulty(word: string) {
   if (word.length <= 4) return "easy"
   if (word.length <= 7) return "medium"
   return "advanced"
 }
 
-function getEmojiForWord(word: string): string {
-  const emojiMap: { [key: string]: string } = {
-    cat: "🐱",
-    dog: "🐶",
-    tree: "🌳",
-    water: "💧",
-    sun: "☀️",
-    book: "📚",
-    apple: "🍎",
-    flower: "🌸",
-    star: "⭐",
-    heart: "❤️",
-    elephant: "🐘",
-    lion: "🦁",
-    moon: "🌙",
-    rain: "🌧️",
-    house: "🏠",
-    school: "🏫",
-    happy: "😊",
-    sad: "😢",
-    friend: "👫",
-    family: "👨‍👩‍👧‍👦",
-  }
-
-  return emojiMap[word] || "📖"
-}
-
-function capitalizeFirst(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1)
+interface DictionaryResult {
+  word?: string
+  phonetic?: string
+  phonetics?: Array<{
+    text?: string
+    audio?: string
+  }>
+  meanings?: Array<{
+    partOfSpeech?: string
+    definitions?: Array<{
+      definition: string
+      example?: string
+      synonyms?: string[]
+      antonyms?: string[]
+    }>
+    synonyms?: string[]
+    antonyms?: string[]
+  }>
 }

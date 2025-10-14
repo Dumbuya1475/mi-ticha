@@ -125,6 +125,88 @@ CREATE POLICY "Students can insert their own questions" ON questions
   );
 
 -- ============================================
+-- WORDS LEARNED TABLE
+-- ============================================
+DROP TABLE IF EXISTS words_learned CASCADE;
+
+CREATE TABLE words_learned (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  word TEXT NOT NULL,
+  definition TEXT,
+  example_sentence TEXT,
+  pronunciation TEXT,
+  times_reviewed INTEGER DEFAULT 1,
+  mastered BOOLEAN DEFAULT FALSE,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_reviewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (student_id, word)
+);
+
+CREATE INDEX IF NOT EXISTS idx_words_student ON words_learned(student_id);
+CREATE INDEX IF NOT EXISTS idx_words_mastered ON words_learned(mastered);
+
+ALTER TABLE words_learned ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Parents can view word progress" ON words_learned;
+CREATE POLICY "Parents can view word progress" ON words_learned
+  FOR SELECT USING (
+    student_id IN (
+      SELECT id FROM students WHERE parent_id = auth.uid()
+    )
+    OR student_id IN (
+      SELECT id FROM students WHERE auth_user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Students can manage their words" ON words_learned;
+CREATE POLICY "Students can manage their words" ON words_learned
+  FOR ALL USING (
+    student_id IN (
+      SELECT id FROM students WHERE auth_user_id = auth.uid()
+    )
+  );
+
+-- ============================================
+-- WORD LEARNING SESSIONS
+-- ============================================
+DROP TABLE IF EXISTS word_learning_sessions CASCADE;
+
+CREATE TABLE word_learning_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  word TEXT NOT NULL,
+  status TEXT NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_word_sessions_student ON word_learning_sessions(student_id);
+CREATE INDEX IF NOT EXISTS idx_word_sessions_created ON word_learning_sessions(created_at DESC);
+
+ALTER TABLE word_learning_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Parents can view word sessions" ON word_learning_sessions;
+CREATE POLICY "Parents can view word sessions" ON word_learning_sessions
+  FOR SELECT USING (
+    student_id IN (
+      SELECT id FROM students WHERE parent_id = auth.uid()
+    )
+    OR student_id IN (
+      SELECT id FROM students WHERE auth_user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Students can insert word sessions" ON word_learning_sessions;
+CREATE POLICY "Students can insert word sessions" ON word_learning_sessions
+  FOR INSERT WITH CHECK (
+    student_id IN (
+      SELECT id FROM students WHERE auth_user_id = auth.uid()
+    )
+  );
+
+-- ============================================
 -- STUDY SESSIONS TABLE
 -- ============================================
 DROP TABLE IF EXISTS study_sessions CASCADE;

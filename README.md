@@ -110,6 +110,36 @@ mitichaapp/
 - **Fonts**: Geist Sans & Geist Mono
 - **Backend**: Supabase (Database & Authentication)
 
+## Vocabulary Tracking
+
+```sql
+create table if not exists words_learned (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references students(id) on delete cascade,
+  word text not null,
+  definition text,
+  example_sentence text,
+  pronunciation text,
+  times_reviewed integer default 1,
+  mastered boolean default false,
+  last_reviewed_at timestamptz default now(),
+  metadata jsonb,
+  created_at timestamptz default now(),
+  unique (student_id, word)
+);
+
+create table if not exists word_learning_sessions (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references students(id) on delete cascade,
+  word text not null,
+  status text not null,
+  payload jsonb,
+  created_at timestamptz default now()
+);
+```
+
+These tables power the Learn Words experience and the parent dashboards. Grant row-level security policies so students can view their own words and parents can monitor progress.
+
 ## Troubleshooting
 
 ### Port Already in Use
