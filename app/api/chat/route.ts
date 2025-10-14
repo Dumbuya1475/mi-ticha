@@ -81,7 +81,18 @@ export async function POST(req: Request) {
     if (!groqResponse.ok) {
       const errorBody = await groqResponse.text()
       console.error("[v0] Groq API error:", groqResponse.status, errorBody)
-      return new Response("Sorry, I had trouble answering that. Please try again.", {
+
+      if (groqResponse.status === 401 || groqResponse.status === 403) {
+        return new Response(
+          "Moe can't connect right now because the AI key looks incorrect. Please ask your teacher to refresh the key.",
+          {
+            status: 503,
+            headers: { "Content-Type": "text/plain" },
+          },
+        )
+      }
+
+      return new Response("Sorry, I had trouble answering that. Please try again in a little bit.", {
         status: 502,
         headers: { "Content-Type": "text/plain" },
       })

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Clock, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy } from "lucide-react"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ArrowLeft, Clock, CheckCircle2, XCircle, Sparkles, BookOpen, Trophy, Play, Square } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 // Sample reading passages
@@ -32,6 +33,7 @@ const estimateReadingMinutes = (text: string) => Math.max(1, Math.ceil(countWord
 
 export default function ReadingPracticePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const [practiceMode, setPracticeMode] = useState<"comprehension" | "fluency">("comprehension")
   const [stage, setStage] = useState<ReadingStage>("select")
   const [passages, setPassages] = useState<ReadingPassage[]>([])
   const [selectedPassage, setSelectedPassage] = useState<ReadingPassage | null>(null)
@@ -40,10 +42,42 @@ export default function ReadingPracticePage({ params }: { params: Promise<{ id: 
   const [answers, setAnswers] = useState<number[]>([])
   const [score, setScore] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("easy")
+  const [isFluencyReading, setIsFluencyReading] = useState(false)
+  const [fluencyStartTime, setFluencyStartTime] = useState<number | null>(null)
+  const [fluencyElapsedTime, setFluencyElapsedTime] = useState(0)
+  const [fluencyResult, setFluencyResult] = useState<
+    | {
+        wordCount: number
+        timeSeconds: number
+        wpm: number
+        timeDisplay: string
+      }
+    | null
+  >(null)
+  const [fluencySelectedWord, setFluencySelectedWord] = useState<string | null>(null)
 
   useEffect(() => {
     loadPassages()
   }, [])
+
+  useEffect(() => {
+    if (practiceMode === "comprehension") {
+      setStage("select")
+      setSelectedPassage(null)
+      setTimeElapsed(0)
+      setIsTimerRunning(false)
+      setAnswers([])
+      setScore(0)
+    } else {
+      setDifficulty("easy")
+      setIsFluencyReading(false)
+      setFluencyStartTime(null)
+      setFluencyElapsedTime(0)
+      setFluencyResult(null)
+      setFluencySelectedWord(null)
+    }
+  }, [practiceMode])
 
   const loadPassages = async () => {
     try {
@@ -173,10 +207,30 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
     return () => clearInterval(interval)
   }, [isTimerRunning])
 
+  useEffect(() => {
+    if (!isFluencyReading || !fluencyStartTime) return
+
+    const interval = setInterval(() => {
+      setFluencyElapsedTime(Math.floor((Date.now() - fluencyStartTime) / 1000))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isFluencyReading, fluencyStartTime])
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const formatFluencyTime = formatTime
+
+  const fluencyPassages: Record<"easy" | "medium" | "hard", string> = {
+    easy: "The sun is bright today. Birds sing in the trees. I see a mango tree. The mangoes are yellow and sweet. My mother will make mango juice.",
+    medium:
+      "In Sierra Leone, cassava is an important food. Farmers grow it in their fields. The roots grow underground. When harvest time comes, families dig up the cassava. They use it to make different foods like fufu and gari.",
+    hard:
+      "Photosynthesis is the process plants use to make food. They take carbon dioxide from the air and water from the soil. Using energy from sunlight, they create glucose and release oxygen. This process is essential for all life on Earth.",
   }
 
   const handleSelectPassage = (passage: ReadingPassage) => {
@@ -256,6 +310,57 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
     setScore(0)
   }
 
+  const handleStartFluency = () => {
+    setIsFluencyReading(true)
+    setFluencyStartTime(Date.now())
+    setFluencyElapsedTime(0)
+    setFluencyResult(null)
+    setFluencySelectedWord(null)
+  }
+
+  const calculateFluencyResults = (elapsedSeconds: number) => {
+    const passage = fluencyPassages[difficulty]
+    const wordCount = countWords(passage)
+    const timeInMinutes = Math.max(elapsedSeconds / 60, 0.1)
+    const wpm = Math.round(wordCount / timeInMinutes)
+
+    setFluencyResult({
+      wordCount,
+      timeSeconds: elapsedSeconds,
+      wpm,
+      timeDisplay: formatFluencyTime(elapsedSeconds),
+    })
+  }
+
+  const handleStopFluency = () => {
+    setIsFluencyReading(false)
+    const elapsedSeconds = fluencyElapsedTime
+    calculateFluencyResults(elapsedSeconds === 0 ? 1 : elapsedSeconds)
+  }
+
+  const handleFluencyWordClick = (word: string) => {
+    setFluencySelectedWord(word)
+
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const utterance = new SpeechSynthesisUtterance(word)
+      utterance.rate = 0.8
+      utterance.pitch = 1.1
+      window.speechSynthesis.speak(utterance)
+    }
+  }
+
+  const handleFluencyReset = () => {
+    setFluencyResult(null)
+    setIsFluencyReading(false)
+    setFluencyStartTime(null)
+    setFluencyElapsedTime(0)
+    setFluencySelectedWord(null)
+  }
+
+  const fluencyWords = fluencyPassages[difficulty].split(/\s+/)
+
+  const headerTitle = practiceMode === "comprehension" ? "Reading Adventure" : "Fluency Sprint"
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10">
@@ -275,21 +380,33 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
               Back
             </Link>
           </Button>
-          <h1 className="font-bold text-xl">Reading Practice</h1>
-          {stage === "reading" || stage === "questions" ? (
+          <h1 className="font-bold text-xl">{headerTitle}</h1>
+          {practiceMode === "comprehension" && (stage === "reading" || stage === "questions") ? (
             <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1 font-semibold text-base">
               <Clock className="h-4 w-4" />
               {formatTime(timeElapsed)}
+            </Badge>
+          ) : practiceMode === "fluency" && isFluencyReading ? (
+            <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1 font-semibold text-base">
+              <Clock className="h-4 w-4" />
+              {formatFluencyTime(fluencyElapsedTime)}
             </Badge>
           ) : (
             <div className="w-20" />
           )}
         </div>
+        <div className="mx-auto mt-4 max-w-4xl">
+          <Tabs value={practiceMode} onValueChange={(value) => setPracticeMode(value as "comprehension" | "fluency")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="comprehension">Story & Questions</TabsTrigger>
+              <TabsTrigger value="fluency">Timed Reading</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-8">
-        {/* Select Passage Stage */}
-        {stage === "select" && (
+        {practiceMode === "comprehension" && stage === "select" && (
           <div className="space-y-8">
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(240px,320px)]">
               <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/90 via-primary/80 to-secondary/80 p-8 text-white shadow-xl">
@@ -369,8 +486,7 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
           </div>
         )}
 
-        {/* Reading Stage */}
-        {stage === "reading" && selectedPassage && (
+        {practiceMode === "comprehension" && stage === "reading" && selectedPassage && (
           <div>
             <Card className="mb-6 border-2">
               <CardHeader>
@@ -398,8 +514,7 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
           </div>
         )}
 
-        {/* Questions Stage */}
-        {stage === "questions" && selectedPassage && (
+        {practiceMode === "comprehension" && stage === "questions" && selectedPassage && (
           <div>
             <div className="mb-6 text-center">
               <h2 className="mb-2 font-bold text-2xl">Answer These Questions</h2>
@@ -446,8 +561,7 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
           </div>
         )}
 
-        {/* Results Stage */}
-        {stage === "results" && selectedPassage && (
+        {practiceMode === "comprehension" && stage === "results" && selectedPassage && (
           <div>
             <Card className="border-2">
               <CardHeader className="text-center">
@@ -529,6 +643,135 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
                 </div>
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {practiceMode === "fluency" && (
+          <div className="space-y-8">
+            <div className="bg-white/60 rounded-3xl border-2 border-border/60 p-6 shadow-md">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <BookOpen className="h-8 w-8 text-primary" />
+                  <div>
+                    <h2 className="font-bold text-2xl">Timed Reading Coach</h2>
+                    <p className="text-muted-foreground text-sm">Choose your level, read aloud, and watch your speed improve.</p>
+                  </div>
+                </div>
+                {isFluencyReading && (
+                  <div className="flex items-center gap-2 rounded-full bg-secondary/20 px-4 py-2">
+                    <Clock className="h-5 w-5 text-secondary" />
+                    <span className="font-mono text-lg font-semibold text-secondary">{formatFluencyTime(fluencyElapsedTime)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                {(Object.keys(fluencyPassages) as Array<"easy" | "medium" | "hard">).map((level) => (
+                  <Button
+                    key={level}
+                    variant={difficulty === level ? "default" : "outline"}
+                    onClick={() => setDifficulty(level)}
+                    disabled={isFluencyReading}
+                    className={`capitalize ${isFluencyReading ? "opacity-60" : ""}`}
+                  >
+                    {level}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Card className="border-2">
+              <CardContent className="pt-6">
+                {!isFluencyReading && !fluencyResult && (
+                  <div className="text-center py-10">
+                    <p className="text-muted-foreground mb-6">Click start when you're ready to read. Tap any word to hear it aloud.</p>
+                    <Button onClick={handleStartFluency} size="lg" className="mx-auto flex items-center gap-3">
+                      <Play className="h-5 w-5" />
+                      Start Reading
+                    </Button>
+                  </div>
+                )}
+
+                {isFluencyReading && (
+                  <div>
+                    <p className="text-lg leading-relaxed text-muted-foreground">
+                      {fluencyWords.map((word, index) => (
+                        <button
+                          key={`${word}-${index}`}
+                          onClick={() => handleFluencyWordClick(word)}
+                          className="rounded px-1 hover:bg-secondary/20 hover:text-primary"
+                          type="button"
+                          title="Click to hear pronunciation"
+                        >
+                          {word}{" "}
+                        </button>
+                      ))}
+                    </p>
+                    <div className="mt-8 border-t pt-6 text-center">
+                      <p className="text-sm text-muted-foreground mb-2">When you finish reading, stop the timer.</p>
+                      <Button onClick={handleStopFluency} variant="destructive" size="lg" className="mx-auto flex items-center gap-3">
+                        <Square className="h-5 w-5" />
+                        I'm Done Reading
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {fluencyResult && (
+                  <div className="space-y-6 text-center">
+                    <div className="rounded-3xl bg-gradient-to-r from-primary/10 to-secondary/10 p-8">
+                      <h3 className="font-bold text-3xl mb-4">Great Job! 🎉</h3>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div className="rounded-xl bg-white p-4 shadow-sm">
+                          <p className="text-xs text-muted-foreground uppercase">Words</p>
+                          <p className="font-bold text-3xl text-primary">{fluencyResult.wordCount}</p>
+                        </div>
+                        <div className="rounded-xl bg-white p-4 shadow-sm">
+                          <p className="text-xs text-muted-foreground uppercase">Time</p>
+                          <p className="font-bold text-3xl text-secondary">{fluencyResult.timeDisplay}</p>
+                        </div>
+                        <div className="rounded-xl bg-white p-4 shadow-sm">
+                          <p className="text-xs text-muted-foreground uppercase">Speed</p>
+                          <p className="font-bold text-3xl text-accent">{fluencyResult.wpm}</p>
+                          <p className="text-muted-foreground text-xs">words per minute</p>
+                        </div>
+                      </div>
+                      <div className="mt-6 rounded-xl bg-white p-5 text-muted-foreground">
+                        {fluencyResult.wpm >= 100 ? (
+                          <p>✨ Fantastic speed! Keep challenging yourself with harder passages.</p>
+                        ) : fluencyResult.wpm >= 60 ? (
+                          <p>📖 Nice work! Practice a little each day to boost your pace.</p>
+                        ) : (
+                          <p>📚 Steady progress! Read along with the recording to grow your confidence.</p>
+                        )}
+                      </div>
+                    </div>
+                    <Button onClick={handleFluencyReset} size="lg" className="mx-auto">
+                      Practice Again
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {fluencySelectedWord && (
+              <Card className="border-2 border-yellow-300 bg-white">
+                <CardHeader className="flex items-center justify-between">
+                  <CardTitle className="text-2xl font-bold">{fluencySelectedWord}</CardTitle>
+                  <button
+                    onClick={() => setFluencySelectedWord(null)}
+                    className="text-muted-foreground text-2xl leading-none"
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <p>🔊 Click the word again to hear it pronounced.</p>
+                  <p>In a real lesson, Moe would share the meaning and an example sentence here.</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </main>

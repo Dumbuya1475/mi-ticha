@@ -258,7 +258,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
                 size="lg"
                 className="h-14 w-full bg-accent font-bold text-lg text-white hover:bg-accent/90"
               >
-                <Link href={`/student/${id}/chat?mode=pronunciation`}>Learn Words</Link>
+                <Link href={`/student/${id}/learn-words`}>Learn Words</Link>
               </Button>
             </CardContent>
           </Card>
