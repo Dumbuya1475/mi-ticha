@@ -23,22 +23,22 @@ Before you begin, ensure you have the following installed on your local machine:
 
 If you have the ZIP file, extract it to your desired location. If using Git:
 
-\`\`\`bash
-git clone <your-repository-url>
-cd mitichaapp
-\`\`\`
+```bash
+git clone https://github.com/Dumbuya1475/mi-ticha.git
+cd mi-ticha
+```
 
 ### 2. Install Dependencies
 
 Navigate to the project directory and install the required packages:
 
-\`\`\`bash
+```bash
 npm install
 # or
 yarn install
 # or
 pnpm install
-\`\`\`
+```
 
 ### 3. Set Up Environment Variables
 
@@ -48,21 +48,21 @@ Create a `.env.local` file in the root directory of the project. See the `ENV_SE
 
 Start the development server:
 
-\`\`\`bash
+```bash
 npm run dev
 # or
 yarn dev
 # or
 pnpm dev
-\`\`\`
+```
 
-The application will be available at [http://localhost:3000](http://localhost:3000)
+The application will be available at [http://localhost:3000](http://localhost:3000) or  [http://localhost:5000](http://localhost:5000)
 
 ### 5. Build for Production
 
 To create a production build:
 
-\`\`\`bash
+```bash
 npm run build
 npm start
 # or
@@ -71,27 +71,27 @@ yarn start
 # or
 pnpm build
 pnpm start
-\`\`\`
+```
 
 ## Project Structure
 
-\`\`\`
-mitichaapp/
+```
+mi-ticha/
 ├── app/                    # Next.js app directory
-│   ├── page.tsx           # Landing page
-│   ├── layout.tsx         # Root layout
-│   └── globals.css        # Global styles
-├── components/            # React components
-│   ├── ui/               # UI components (shadcn/ui)
+│   ├── page.tsx            # Landing page
+│   ├── layout.tsx          # Root layout
+│   └── globals.css         # Global styles
+├── components/             # React components
+│   ├── ui/                 # UI components (shadcn/ui)
 │   └── ...
-├── hooks/                # Custom React hooks
-├── lib/                  # Utility functions
-├── public/               # Static assets
-├── .env.local           # Environment variables (create this)
-├── next.config.mjs      # Next.js configuration
-├── package.json         # Project dependencies
-└── tsconfig.json        # TypeScript configuration
-\`\`\`
+├── hooks/                  # Custom React hooks
+├── lib/                    # Utility functions
+├── public/                 # Static assets
+├── .env.local              # Environment variables (create this)
+├── next.config.mjs         # Next.js configuration
+├── package.json            # Project dependencies
+└── tsconfig.json           # TypeScript configuration
+```
 
 ## Available Scripts
 
@@ -116,34 +116,34 @@ mitichaapp/
 
 If port 3000 is already in use, you can specify a different port:
 
-\`\`\`bash
-npm run dev -- -p 3001
-\`\`\`
+```bash
+npm run dev -- -p 5000
+```
 
 ### Module Not Found Errors
 
 If you encounter module errors, try deleting `node_modules` and reinstalling:
 
-\`\`\`bash
+```bash
 rm -rf node_modules
 npm install
-\`\`\`
+```
 
 ### Build Errors
 
 Clear the Next.js cache:
 
-\`\`\`bash
+```bash
 rm -rf .next
 npm run build
-\`\`\`
+```
 
 ## Support
 
 For issues or questions:
 - Check the `ENV_SETUP.md` file for environment configuration help
 - Review the Next.js documentation: [https://nextjs.org/docs](https://nextjs.org/docs)
-- Contact support at your organization
+<!-- - Contact support at your organization -->
 
 ## License
 

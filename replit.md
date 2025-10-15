@@ -70,7 +70,7 @@ Preferred communication style: Simple, everyday language.
 **AI Integration**:
 - Uses Vercel AI SDK (`ai` package) for streaming chat responses
 - Groq's Llama 3.1 70B model for tutoring conversations
-- Three distinct tutoring modes: homework help, pronunciation practice, and reading assistance
+- Three distinct tutoring modes: homework help, pronunciation practice, math practising and reading assistance
 - Context-aware prompts tailored to Sierra Leone educational context
 
 **Data Models** (Supabase Tables):
