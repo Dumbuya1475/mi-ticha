@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { MessageSquare, BookOpen, Trophy, Clock, LogOut, Volume2, Calculator } from "lucide-react"
+import { MessageSquare, BookOpen, Trophy, Clock, LogOut, Volume2, Calculator, BookMarked } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 interface Student {
@@ -259,6 +259,27 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
                 className="h-14 w-full bg-accent font-bold text-lg text-white hover:bg-accent/90"
               >
                 <Link href={`/student/${id}/learn-words`}>Learn Words</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="group border-4 border-white/20 bg-white transition-all hover:scale-105 hover:shadow-2xl">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-500">
+                <BookMarked className="h-12 w-12 text-white" />
+              </div>
+              <CardTitle className="font-bold text-2xl">Word Bank</CardTitle>
+              <CardDescription className="text-base leading-relaxed">
+                Review every word you've practiced with Moe. See what’s mastered and what needs another look.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                asChild
+                size="lg"
+                className="h-14 w-full bg-amber-400 font-bold text-lg text-slate-900 hover:bg-amber-300"
+              >
+                <Link href={`/student/${id}/word-bank`}>Open Word Bank</Link>
               </Button>
             </CardContent>
           </Card>

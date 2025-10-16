@@ -2,11 +2,11 @@
 
 import { FormEvent, use, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Volume2, Check, X, Sparkles, Trophy, Mic, Loader2, ArrowLeft, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 const STEPS = [
@@ -47,10 +47,28 @@ type SpeechRecognitionInstance = {
   onend?: () => void
 }
 
+const getPronunciationParts = (value: string) => {
+  const cleaned = value.replace(/\s+/g, " ").trim()
+
+  if (!cleaned) {
+    return { spelled: "", spoken: "" }
+  }
+
+  const segments = cleaned.split(" ").filter(Boolean)
+  const isLetterChain = segments.length > 0 && segments.every((segment) => segment.length === 1)
+  const spoken = isLetterChain ? segments.join("") : cleaned
+
+  const spelled = segments
+    .map((segment) => segment.split("").join(" "))
+    .join("   ")
+
+  return { spelled, spoken }
+}
+
 export default function LearnWordsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const router = useRouter()
 
+  const [activeTab, setActiveTab] = useState<"pronounce" | "learn">("pronounce")
   const [step, setStep] = useState<Step>("entry")
   const [inputWord, setInputWord] = useState("")
   const [wordDetails, setWordDetails] = useState<WordDetails | null>(null)
@@ -61,6 +79,9 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [isListening, setIsListening] = useState(false)
+  const [pronounceWord, setPronounceWord] = useState("")
+  const [pronunciationError, setPronunciationError] = useState<string | null>(null)
+  const [pronunciationSuccess, setPronunciationSuccess] = useState<string | null>(null)
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const celebrationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -205,17 +226,72 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
 
   const speakText = (text: string) => {
     if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) {
-      return
+      return false
     }
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 0.85
     window.speechSynthesis.cancel()
     window.speechSynthesis.speak(utterance)
+    return true
   }
 
-  const startListening = () => {
-    setErrorMessage(null)
+  const speakSpelling = (rawWord: string) => {
+    if (!rawWord || typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return false
+    }
+
+    const { spelled, spoken } = getPronunciationParts(rawWord)
+
+    if (!spoken) {
+      return false
+    }
+
+    const synth = window.speechSynthesis
+    synth.cancel()
+
+    if (spelled) {
+      const spelledUtterance = new SpeechSynthesisUtterance(spelled.toUpperCase())
+      spelledUtterance.lang = "en-US"
+      spelledUtterance.rate = 0.85
+      spelledUtterance.pitch = 1
+      synth.speak(spelledUtterance)
+    }
+
+    const wordUtterance = new SpeechSynthesisUtterance(spoken)
+    wordUtterance.lang = "en-US"
+    wordUtterance.rate = 0.95
+    wordUtterance.pitch = 1
+    synth.speak(wordUtterance)
+
+    return true
+  }
+
+  const logPronunciation = async (word: string) => {
+    const normalized = word.replace(/\s+/g, " ").trim()
+
+    if (!normalized) {
+      return
+    }
+
+    try {
+      await fetch("/api/word-bank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: normalized, studentId: id }),
+      })
+    } catch (error) {
+      console.error("[v0] Failed to log pronunciation:", error)
+    }
+  }
+
+  const startListening = (target: "learn" | "pronounce") => {
+    if (target === "learn") {
+      setErrorMessage(null)
+    } else {
+      setPronunciationError(null)
+      setPronunciationSuccess(null)
+    }
 
     if (typeof window === "undefined") {
       return
@@ -224,7 +300,11 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
 
     if (!SpeechRecognition) {
-      setErrorMessage("Your browser doesn't support speech-to-text. Try typing the word instead.")
+      if (target === "learn") {
+        setErrorMessage("Your browser doesn't support speech-to-text. Try typing the word instead.")
+      } else {
+        setPronunciationError("Your browser doesn't support speech-to-text. Try typing the word instead.")
+      }
       return
     }
 
@@ -237,13 +317,24 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
     recognition.onresult = (event) => {
       const transcript = event?.results?.[0]?.[0]?.transcript as string | undefined
       if (transcript) {
-        setInputWord(transcript.toLowerCase())
+        const value = transcript.toLowerCase()
+        if (target === "learn") {
+          setInputWord(value)
+        } else {
+          setPronounceWord(value)
+          setPronunciationError(null)
+          setPronunciationSuccess(null)
+        }
       }
       setIsListening(false)
     }
 
     recognition.onerror = () => {
-      setErrorMessage("We couldn't hear clearly. Please try again or type the word.")
+      if (target === "learn") {
+        setErrorMessage("We couldn't hear clearly. Please try again or type the word.")
+      } else {
+        setPronunciationError("We couldn't hear clearly. Please try again or type the word.")
+      }
       setIsListening(false)
     }
 
@@ -262,12 +353,107 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
     setIsListening(false)
   }
 
+  const handlePronounce = () => {
+    const trimmed = pronounceWord.trim()
+
+    if (!trimmed) {
+      setPronunciationError("Type a word or use the microphone first.")
+      setPronunciationSuccess(null)
+      return
+    }
+
+    const didSpeak = speakSpelling(trimmed)
+
+    if (!didSpeak) {
+      setPronunciationError("We couldn't play the pronunciation. Try a different browser or device.")
+      setPronunciationSuccess(null)
+      return
+    }
+
+    setPronunciationError(null)
+    const { spelled: spelledDisplay, spoken: spokenWord } = getPronunciationParts(trimmed)
+    const displaySpelling = spelledDisplay || spokenWord
+    setPronunciationSuccess(`Moe is saying "${displaySpelling}${spokenWord ? ` - ${spokenWord}` : ""}". Listen and repeat!`)
+
+    if (spokenWord) {
+      void logPronunciation(spokenWord)
+    }
+  }
+
   const resetToEntry = () => {
     setStep("entry")
     setWordDetails(null)
     setInputWord("")
     setInfoMessage(null)
     setErrorMessage(null)
+  }
+
+  const PronunciationView = () => {
+    const { spelled: spelledDisplay, spoken: spokenWord } = getPronunciationParts(pronounceWord)
+
+    return (
+      <div className="mx-auto max-w-2xl p-6">
+        <Card className="border-4 border-purple-200 shadow-xl">
+          <CardHeader className="space-y-2 text-center">
+            <CardTitle className="text-3xl font-bold text-gray-900">Practice pronunciation</CardTitle>
+            <CardDescription className="text-base">
+              Type a word, say it out loud, and Moe will pronounce it back to you.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {spokenWord ? (
+              <div className="rounded-xl border-2 border-purple-100 bg-purple-50 p-4 text-center">
+                <p className="text-sm font-semibold text-purple-700">Say it like</p>
+                <p className="mt-2 text-2xl font-bold text-purple-900">
+                  {(spelledDisplay || spokenWord) + (spokenWord ? ` - ${spokenWord}` : "")}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                className="flex-1 rounded-xl border-2 border-purple-200 bg-white px-4 py-3 text-lg shadow-sm focus:border-purple-500 focus:outline-none"
+                placeholder="Enter a word (e.g. courageous)"
+                value={pronounceWord}
+                onChange={(event) => {
+                  setPronounceWord(event.target.value)
+                  setPronunciationError(null)
+                  setPronunciationSuccess(null)
+                }}
+                aria-label="Word to pronounce"
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={isListening ? "destructive" : "secondary"}
+                  className="h-12 w-12 flex-shrink-0"
+                  onClick={() => (isListening ? stopListening() : startListening("pronounce"))}
+                >
+                  {isListening ? <X className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  <span className="sr-only">{isListening ? "Stop listening" : "Start speech to text"}</span>
+                </Button>
+                <Button type="button" className="h-12 flex-shrink-0 font-semibold" onClick={handlePronounce}>
+                  Hear it
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+              <p className="font-semibold">Pronunciation tip</p>
+              <p>Press "Hear it" and then repeat after Moe three times to lock it in.</p>
+            </div>
+
+            {pronunciationError ? (
+              <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-red-700">{pronunciationError}</div>
+            ) : null}
+
+            {pronunciationSuccess ? (
+              <div className="rounded-xl border-2 border-green-200 bg-green-50 px-4 py-3 text-green-700">{pronunciationSuccess}</div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   const QuestionView = () => (
@@ -537,7 +723,7 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
                   type="button"
                   variant={isListening ? "destructive" : "secondary"}
                   className="h-12 w-12 flex-shrink-0"
-                  onClick={isListening ? stopListening : startListening}
+                  onClick={() => (isListening ? stopListening() : startListening("learn"))}
                 >
                   {isListening ? <X className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                   <span className="sr-only">{isListening ? "Stop listening" : "Start speech to text"}</span>
@@ -564,61 +750,84 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
     </div>
   ) : null
 
+  const handleTabChange = (value: string) => {
+    const nextTab = value === "pronounce" ? "pronounce" : "learn"
+    setActiveTab(nextTab)
+
+    if (nextTab === "pronounce") {
+      setPronunciationError(null)
+      setPronunciationSuccess(null)
+    } else {
+      setErrorMessage(null)
+      setInfoMessage(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-blue-50 to-green-50 py-8">
       {CelebrationOverlay}
 
-      <div className="mx-auto mb-6 max-w-4xl px-6">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            className="w-fit gap-2 absolute left-4 top-4 sm:static sm:left-auto sm:top-auto"
-            onClick={() => router.push(`/student/${id}`)}
-          >
+      <div className="mx-auto max-w-4xl px-6 pb-12">
+        <Button variant="ghost" className="mb-4 w-fit gap-2" asChild>
+          <Link href={`/student/${id}`}>
             <ArrowLeft className="h-4 w-4" /> Back to activities
-          </Button>
-        </div>
-        <div className="mt-4 overflow-x-auto rounded-xl bg-white p-3 shadow-md">
-          <div className="flex gap-2">
-            {STEPS.map(({ label, state }) => (
-              <button
-                key={state}
-                type="button"
-                className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                  step === state ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
-                }`}
-                onClick={() => {
-                  if (state === "entry") {
-                    resetToEntry()
-                  } else if (wordDetails) {
-                    setStep(state as Step)
-                  }
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+          </Link>
+        </Button>
+
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 bg-white p-1">
+            <TabsTrigger value="pronounce">Pronounce</TabsTrigger>
+            <TabsTrigger value="learn">Learn & Master</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pronounce">
+            <PronunciationView />
+          </TabsContent>
+
+          <TabsContent value="learn" className="space-y-6">
+            <div className="overflow-x-auto rounded-xl bg-white p-3 shadow-md">
+              <div className="flex gap-2">
+                {STEPS.map(({ label, state }) => (
+                  <button
+                    key={state}
+                    type="button"
+                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      step === state ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+                    }`}
+                    onClick={() => {
+                      if (state === "entry") {
+                        resetToEntry()
+                      } else if (wordDetails) {
+                        setStep(state as Step)
+                      }
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {errorMessage ? (
+              <div className="mx-auto max-w-2xl rounded-xl border-2 border-red-200 bg-red-50 px-6 py-4 text-red-700">
+                {errorMessage}
+              </div>
+            ) : null}
+
+            {infoMessage ? (
+              <div className="mx-auto max-w-2xl rounded-xl border-2 border-blue-200 bg-blue-50 px-6 py-4 text-blue-700">
+                {infoMessage}
+              </div>
+            ) : null}
+
+            {step === "entry" && <EntryView />}
+            {step === "question" && wordDetails && <QuestionView />}
+            {step === "learning" && wordDetails && <LearningView />}
+            {step === "review" && wordDetails && <ReviewView />}
+            {step === "success" && wordDetails && <SuccessView />}
+          </TabsContent>
+        </Tabs>
       </div>
-
-      {errorMessage ? (
-        <div className="mx-auto mb-4 max-w-2xl rounded-xl border-2 border-red-200 bg-red-50 px-6 py-4 text-red-700">
-          {errorMessage}
-        </div>
-      ) : null}
-
-      {infoMessage ? (
-        <div className="mx-auto mb-4 max-w-2xl rounded-xl border-2 border-blue-200 bg-blue-50 px-6 py-4 text-blue-700">
-          {infoMessage}
-        </div>
-      ) : null}
-
-      {step === "entry" && <EntryView />}
-      {step === "question" && wordDetails && <QuestionView />}
-      {step === "learning" && wordDetails && <LearningView />}
-      {step === "review" && wordDetails && <ReviewView />}
-      {step === "success" && wordDetails && <SuccessView />}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createGroq } from "@ai-sdk/groq"
 import { generateText } from "ai"
 
 export const maxDuration = 45
@@ -9,6 +10,15 @@ export async function POST(request: NextRequest) {
 
     if (!problem || typeof problem !== "string") {
       return NextResponse.json({ error: "Please provide a math problem to solve." }, { status: 400 })
+    }
+
+    const groqApiKey = process.env.GROQ_API_KEY
+
+    if (!groqApiKey) {
+      return NextResponse.json(
+        { error: "AI service not configured. Please ask your teacher to refresh the Groq key." },
+        { status: 500 },
+      )
     }
 
     const prompt = `You are Moe, a joyful tutor helping an 8-14 year old student from Sierra Leone.
@@ -43,8 +53,10 @@ Rules:
 - Use culturally relevant examples when possible.
 - Output must be JSON only with double quotes.`
 
+    const groq = createGroq({ apiKey: groqApiKey })
+
     const { text } = await generateText({
-      model: "groq/llama-3.1-70b-versatile",
+      model: groq("llama-3.1-70b-versatile"),
       prompt,
       maxOutputTokens: 900,
     })

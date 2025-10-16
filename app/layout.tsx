@@ -10,6 +10,14 @@ export const metadata: Metadata = {
   title: "Mi Ticha - AI Learning for Sierra Leone Students",
   description: "Empowering Sierra Leone students with AI-powered homework help and reading practice",
   generator: "v0.app",
+  applicationName: "Mi Ticha",
+  manifest: "/manifest.webmanifest",
+  themeColor: "#2563eb",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Mi Ticha",
+  },
 }
 
 export default function RootLayout({

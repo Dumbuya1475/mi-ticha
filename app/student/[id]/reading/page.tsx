@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useState } from "react"
+import { use, useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -332,6 +332,35 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
     })
   }
 
+  const logFluencyPronunciation = useCallback(
+    async (word: string) => {
+      const normalized = word?.trim()
+
+      if (!normalized) {
+        return
+      }
+
+      try {
+        await fetch("/api/word-bank", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            word: normalized,
+            studentId: id,
+            status: "pronounced",
+            payload: {
+              source: "reading_fluency",
+              difficulty,
+            },
+          }),
+        })
+      } catch (error) {
+        console.error("[v0] Failed to log reading pronunciation:", error)
+      }
+    },
+    [difficulty, id],
+  )
+
   const handleStopFluency = () => {
     setIsFluencyReading(false)
     const elapsedSeconds = fluencyElapsedTime
@@ -347,6 +376,8 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
       utterance.pitch = 1.1
       window.speechSynthesis.speak(utterance)
     }
+
+    void logFluencyPronunciation(word)
   }
 
   const handleFluencyReset = () => {
@@ -438,7 +469,7 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
                   </div>
                 </div>
               </div>
-              <div className="relative min-h-[260px] overflow-hidden rounded-3xl border-4 border-white/70 bg-white shadow-xl">
+              <div className="relative min-h-[260px] overflow-hidden rounded-3xl border-4 border-white/70 shadow-xl">
                 <Image
                   src={readingIllustration}
                   alt="Illustration of a child reading a storybook"

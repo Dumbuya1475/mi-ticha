@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
+import { createGroq } from "@ai-sdk/groq"
 import { createClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const groqApiKey = process.env.GROQ_API_KEY
 
 if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error(
@@ -12,6 +14,8 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
+const groq = groqApiKey ? createGroq({ apiKey: groqApiKey }) : null
+const GROQ_WORD_MODEL = process.env.GROQ_WORD_MODEL ?? "llama-3.3-70b-versatile"
 
 export async function POST(request: NextRequest) {
   try {
@@ -162,6 +166,25 @@ async function logWordLearningEvent(
     if (error && error.code !== "42P01") {
       console.error("[v0] Failed to log word learning session:", error)
     }
+
+    const now = new Date().toISOString()
+    const minutes = status === "mastered" ? 3 : 1
+    const questionsAnswered = status === "mastered" ? 1 : 0
+    const questionsCorrect = status === "mastered" ? 1 : 0
+
+    const { error: sessionError } = await supabase.from("study_sessions").insert({
+      student_id: studentId,
+      subject: "Vocabulary",
+      duration_minutes: minutes,
+      questions_answered: questionsAnswered,
+      questions_correct: questionsCorrect,
+      started_at: now,
+      ended_at: now,
+    })
+
+    if (sessionError && sessionError.code !== "42P01") {
+      console.error("[v0] Failed to record vocabulary study session:", sessionError)
+    }
   } catch (error) {
     console.error("[v0] Unexpected error logging word learning session:", error)
   }
@@ -242,8 +265,13 @@ async function fetchDictionaryEntry(word: string): Promise<WordDetails | null> {
 
 async function fetchAIEntry(word: string): Promise<WordDetails | null> {
   try {
+    if (!groq) {
+      console.warn("[v0] GROQ_API_KEY is missing; using fallback word details")
+      return fallbackAIEntry(word)
+    }
+
     const { text } = await generateText({
-      model: "groq/llama-3.1-70b-versatile",
+      model: groq(GROQ_WORD_MODEL),
       prompt: `You are Moe, an enthusiastic tutor for 8-14 year old students in Sierra Leone. A student asked to learn the word "${word}".
 
 Respond with a single JSON object using this exact shape:

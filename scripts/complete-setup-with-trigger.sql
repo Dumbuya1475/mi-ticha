@@ -80,6 +80,31 @@ CREATE TABLE IF NOT EXISTS public.reading_activities (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- WORDS LEARNED TABLE
+CREATE TABLE IF NOT EXISTS public.words_learned (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  word TEXT NOT NULL,
+  definition TEXT,
+  example_sentence TEXT,
+  pronunciation TEXT,
+  mastered BOOLEAN DEFAULT false,
+  times_reviewed INTEGER DEFAULT 1,
+  last_reviewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (student_id, word)
+);
+
+-- WORD LEARNING SESSIONS TABLE
+CREATE TABLE IF NOT EXISTS public.word_learning_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  word TEXT NOT NULL,
+  status TEXT NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- DAILY STATS TABLE
 CREATE TABLE IF NOT EXISTS public.daily_stats (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -127,6 +152,8 @@ CREATE INDEX IF NOT EXISTS idx_study_sessions_student_id ON public.study_session
 CREATE INDEX IF NOT EXISTS idx_notifications_parent_id ON public.parent_notifications(parent_id);
 CREATE INDEX IF NOT EXISTS idx_reading_passages_difficulty ON public.reading_passages(difficulty_level);
 CREATE INDEX IF NOT EXISTS idx_reading_passages_grade ON public.reading_passages(grade_level);
+CREATE INDEX IF NOT EXISTS idx_words_learned_student ON public.words_learned(student_id);
+CREATE INDEX IF NOT EXISTS idx_word_sessions_student ON public.word_learning_sessions(student_id);
 
 -- ENABLE RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -138,6 +165,8 @@ ALTER TABLE public.reading_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.study_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parent_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.words_learned ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.word_learning_sessions ENABLE ROW LEVEL SECURITY;
 
 -- RLS POLICIES
 
@@ -229,6 +258,50 @@ CREATE POLICY "Students can insert their own reading activities" ON public.readi
     student_id IN (SELECT id FROM public.students WHERE auth_user_id = auth.uid())
   );
 
+-- Words learned policies
+DROP POLICY IF EXISTS "Students can view their words" ON public.words_learned;
+CREATE POLICY "Students can view their words" ON public.words_learned
+  FOR SELECT USING (
+    student_id IN (SELECT id FROM public.students WHERE auth_user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "Students can insert their words" ON public.words_learned;
+CREATE POLICY "Students can insert their words" ON public.words_learned
+  FOR INSERT WITH CHECK (
+    student_id IN (SELECT id FROM public.students WHERE auth_user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "Students can update their words" ON public.words_learned;
+CREATE POLICY "Students can update their words" ON public.words_learned
+  FOR UPDATE USING (
+    student_id IN (SELECT id FROM public.students WHERE auth_user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "Parents can view their students words" ON public.words_learned;
+CREATE POLICY "Parents can view their students words" ON public.words_learned
+  FOR SELECT USING (
+    student_id IN (SELECT id FROM public.students WHERE parent_id = auth.uid())
+  );
+
+-- Word learning session policies
+DROP POLICY IF EXISTS "Students can view their word sessions" ON public.word_learning_sessions;
+CREATE POLICY "Students can view their word sessions" ON public.word_learning_sessions
+  FOR SELECT USING (
+    student_id IN (SELECT id FROM public.students WHERE auth_user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "Students can insert their word sessions" ON public.word_learning_sessions;
+CREATE POLICY "Students can insert their word sessions" ON public.word_learning_sessions
+  FOR INSERT WITH CHECK (
+    student_id IN (SELECT id FROM public.students WHERE auth_user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "Parents can view their students word sessions" ON public.word_learning_sessions;
+CREATE POLICY "Parents can view their students word sessions" ON public.word_learning_sessions
+  FOR SELECT USING (
+    student_id IN (SELECT id FROM public.students WHERE parent_id = auth.uid())
+  );
+
 -- Daily stats policies
 DROP POLICY IF EXISTS "Students can view their own stats" ON public.daily_stats;
 CREATE POLICY "Students can view their own stats" ON public.daily_stats
@@ -259,6 +332,12 @@ DROP POLICY IF EXISTS "Students can insert their own sessions" ON public.study_s
 CREATE POLICY "Students can insert their own sessions" ON public.study_sessions
   FOR INSERT WITH CHECK (
     student_id IN (SELECT id FROM public.students WHERE auth_user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "Parents can view their students sessions" ON public.study_sessions;
+CREATE POLICY "Parents can view their students sessions" ON public.study_sessions
+  FOR SELECT USING (
+    student_id IN (SELECT id FROM public.students WHERE parent_id = auth.uid())
   );
 
 -- Parent notifications policies

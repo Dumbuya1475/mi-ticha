@@ -1,3 +1,14 @@
+import withPWAInit from "next-pwa"
+import runtimeCaching from "next-pwa/cache"
+
+const withPWA = withPWAInit({
+  dest: "public",
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === "development",
+  runtimeCaching,
+})
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
@@ -11,4 +22,4 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+export default withPWA(nextConfig)
