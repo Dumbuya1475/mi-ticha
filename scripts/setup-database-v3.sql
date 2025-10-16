@@ -196,6 +196,10 @@ USING (
 );
 
 -- Words learned table
+ALTER TABLE words_learned
+ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb,
+ADD COLUMN IF NOT EXISTS last_reviewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
 DROP POLICY IF EXISTS "Students can view their own words" ON words_learned;
 DROP POLICY IF EXISTS "Students can manage their own words" ON words_learned;
 DROP POLICY IF EXISTS "Users can view own words" ON words_learned;
@@ -214,6 +218,41 @@ CREATE POLICY "Students can manage their own words"
 ON words_learned FOR ALL
 TO authenticated
 USING (
+  student_id IN (
+    SELECT id FROM students WHERE auth_user_id = auth.uid()
+  )
+);
+
+-- Word learning sessions table for detailed logs
+CREATE TABLE IF NOT EXISTS word_learning_sessions (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  student_id UUID REFERENCES students(id) ON DELETE CASCADE NOT NULL,
+  word TEXT NOT NULL,
+  status TEXT NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_word_sessions_student ON word_learning_sessions(student_id);
+CREATE INDEX IF NOT EXISTS idx_word_sessions_created ON word_learning_sessions(created_at DESC);
+
+ALTER TABLE word_learning_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Parents can view word sessions" ON word_learning_sessions;
+CREATE POLICY "Parents can view word sessions"
+ON word_learning_sessions FOR SELECT
+TO authenticated
+USING (
+  student_id IN (
+    SELECT id FROM students WHERE auth_user_id = auth.uid() OR parent_id = auth.uid()
+  )
+);
+
+DROP POLICY IF EXISTS "Students can insert word sessions" ON word_learning_sessions;
+CREATE POLICY "Students can insert word sessions"
+ON word_learning_sessions FOR INSERT
+TO authenticated
+WITH CHECK (
   student_id IN (
     SELECT id FROM students WHERE auth_user_id = auth.uid()
   )

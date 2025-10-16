@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS words_learned (
   mastered BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   last_reviewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  metadata JSONB DEFAULT '{}'::jsonb,
   UNIQUE(student_id, word)
 );
 
@@ -165,6 +166,33 @@ CREATE POLICY "Users can view own words" ON words_learned
 DROP POLICY IF EXISTS "Users can manage own words" ON words_learned;
 CREATE POLICY "Users can manage own words" ON words_learned
   FOR ALL USING (true); -- Allow any authenticated user
+
+-- Detailed word learning session logs
+CREATE TABLE IF NOT EXISTS word_learning_sessions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  student_id UUID REFERENCES students(id) ON DELETE CASCADE NOT NULL,
+  word TEXT NOT NULL,
+  status TEXT NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_word_sessions_student ON word_learning_sessions(student_id);
+CREATE INDEX IF NOT EXISTS idx_word_sessions_created ON word_learning_sessions(created_at DESC);
+
+ALTER TABLE word_learning_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view word sessions" ON word_learning_sessions;
+CREATE POLICY "Users can view word sessions" ON word_learning_sessions
+  FOR SELECT USING (
+    student_id IN (
+      SELECT id FROM students WHERE parent_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Users can insert word sessions" ON word_learning_sessions;
+CREATE POLICY "Users can insert word sessions" ON word_learning_sessions
+  FOR INSERT WITH CHECK (true);
 
 -- ============================================
 -- TABLE 6: DAILY_STATS (Progress tracking)

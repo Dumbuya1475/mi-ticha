@@ -19,6 +19,8 @@ interface Child {
   hoursLearned: number
   lastActive: string
   weeklyProgress: number
+  wordsLearned: number
+  recentWords: string[]
 }
 
 interface Stats {
@@ -26,6 +28,7 @@ interface Stats {
   totalHours: number
   totalSessions: number
   averageProgress: number
+  totalWordsLearned: number
 }
 
 export default function DashboardPage() {
@@ -36,6 +39,7 @@ export default function DashboardPage() {
     totalHours: 0,
     totalSessions: 0,
     averageProgress: 0,
+    totalWordsLearned: 0,
   })
   const [isLoading, setIsLoading] = useState(true)
   const [parentId, setParentId] = useState<string | null>(null)
@@ -88,6 +92,25 @@ export default function DashboardPage() {
             const totalMinutes = sessionsData?.reduce((sum, session) => sum + (session.duration_minutes || 0), 0) || 0
             const hoursLearned = Math.round((totalMinutes / 60) * 10) / 10
 
+            // Get vocabulary progress
+            const { count: wordsCount } = await supabase
+              .from("words_learned")
+              .select("id", { count: "exact", head: true })
+              .eq("student_id", student.id)
+              .eq("mastered", true)
+
+            const { data: latestWordsData } = await supabase
+              .from("words_learned")
+              .select("word, last_reviewed_at")
+              .eq("student_id", student.id)
+              .eq("mastered", true)
+              .order("last_reviewed_at", { ascending: false })
+              .limit(3)
+
+            const recentWords = (latestWordsData ?? [])
+              .map((entry) => entry.word)
+              .filter((word): word is string => Boolean(word))
+
             // Get last activity
             const { data: lastSession } = await supabase
               .from("study_sessions")
@@ -120,6 +143,8 @@ export default function DashboardPage() {
               hoursLearned,
               lastActive,
               weeklyProgress,
+              wordsLearned: wordsCount || 0,
+              recentWords,
             }
           }),
         )
@@ -129,6 +154,7 @@ export default function DashboardPage() {
         // Calculate overall stats
         const totalSessions = childrenWithStats.reduce((sum, child) => sum + child.totalSessions, 0)
         const totalHours = childrenWithStats.reduce((sum, child) => sum + child.hoursLearned, 0)
+        const totalWordsLearned = childrenWithStats.reduce((sum, child) => sum + child.wordsLearned, 0)
         const averageProgress =
           childrenWithStats.length > 0
             ? Math.round(
@@ -141,6 +167,7 @@ export default function DashboardPage() {
           totalHours: Math.round(totalHours * 10) / 10,
           totalSessions,
           averageProgress,
+          totalWordsLearned,
         })
 
         setIsLoading(false)
@@ -211,7 +238,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Overview */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card className="border-2">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -263,6 +290,20 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                   <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-2">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-muted-foreground text-sm">Words Mastered</p>
+                  <p className="font-bold text-3xl">{stats.totalWordsLearned}</p>
+                </div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                  <BookOpen className="h-6 w-6 text-emerald-600" />
                 </div>
               </div>
             </CardContent>
@@ -321,6 +362,28 @@ export default function DashboardPage() {
                       <p className="text-muted-foreground text-xs">Last Active</p>
                       <p className="font-semibold text-sm">{child.lastActive}</p>
                     </div>
+                  </div>
+                  <div className="mb-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-sm text-primary">Words mastered</p>
+                      <span className="font-bold text-lg text-primary">{child.wordsLearned}</span>
+                    </div>
+                    {child.wordsLearned > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {child.recentWords.map((word) => (
+                          <Badge key={word} variant="outline" className="border-primary/40 text-primary">
+                            {word}
+                          </Badge>
+                        ))}
+                        {child.wordsLearned > child.recentWords.length ? (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary">
+                            +{child.wordsLearned - child.recentWords.length} more
+                          </Badge>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-muted-foreground text-sm">No mastered words yet.</p>
+                    )}
                   </div>
                   <Button asChild variant="outline" className="w-full bg-transparent font-semibold">
                     <Link href={`/dashboard/child/${child.id}`}>View Details</Link>

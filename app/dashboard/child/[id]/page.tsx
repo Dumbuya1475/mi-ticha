@@ -22,11 +22,12 @@ interface ChildData {
   weeklyProgress: number
   recentActivities: Activity[]
   subjectProgress: SubjectProgress[]
+  words: WordProgress[]
 }
 
 interface Activity {
   id: string
-  type: "chat" | "reading"
+  type: "chat" | "reading" | "word"
   title: string
   duration: string
   date: string
@@ -38,6 +39,16 @@ interface SubjectProgress {
   subject: string
   progress: number
   sessions: number
+}
+
+interface WordProgress {
+  id: string
+  word: string
+  definition: string | null
+  simpleDefinition: string | null
+  mastered: boolean
+  timesReviewed: number
+  lastReviewedAt: string | null
 }
 
 export default function ChildDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -116,6 +127,12 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
           .order("created_at", { ascending: false })
           .limit(2)
 
+        const { data: wordsData } = await supabase
+          .from("words_learned")
+          .select("id, word, mastered, times_reviewed, last_reviewed_at, definition, metadata")
+          .eq("student_id", id)
+          .order("last_reviewed_at", { ascending: false })
+
         const recentActivities: Activity[] = [
           ...(questionsData || []).map((q) => ({
             id: q.id,
@@ -135,9 +152,31 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
             subject: "Reading",
             timestamp: new Date(r.created_at).getTime(),
           })),
+          ...(wordsData || []).slice(0, 4).map((word) => {
+            const reviewedAt = word.last_reviewed_at ? new Date(word.last_reviewed_at) : new Date()
+            return {
+              id: word.id,
+              type: "word" as const,
+              title: `Learned "${word.word}"`,
+              duration: `${word.times_reviewed || 1} review${(word.times_reviewed || 1) > 1 ? "s" : ""}`,
+              date: formatDate(reviewedAt),
+              subject: word.mastered ? "Mastered" : "Review",
+              timestamp: reviewedAt.getTime(),
+            }
+          }),
         ]
           .sort((a, b) => b.timestamp - a.timestamp)
           .slice(0, 4)
+
+        const words: WordProgress[] = (wordsData || []).map((word) => ({
+          id: word.id,
+          word: word.word,
+          definition: word.definition ?? null,
+          simpleDefinition: (word.metadata as any)?.simpleDefinition ?? null,
+          mastered: Boolean(word.mastered),
+          timesReviewed: word.times_reviewed || 0,
+          lastReviewedAt: word.last_reviewed_at || null,
+        }))
 
         // Calculate subject progress from study sessions
         const { data: subjectSessions } = await supabase
@@ -180,6 +219,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                   { subject: "Reading", progress: 0, sessions: 0 },
                   { subject: "Science", progress: 0, sessions: 0 },
                 ],
+          words,
         })
 
         setIsLoading(false)
@@ -318,11 +358,17 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                     <div key={activity.id} className="flex items-start gap-4 rounded-lg border p-4">
                       <div
                         className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full ${
-                          activity.type === "chat" ? "bg-primary/10" : "bg-secondary/10"
+                          activity.type === "chat"
+                            ? "bg-primary/10"
+                            : activity.type === "word"
+                              ? "bg-emerald-100"
+                              : "bg-secondary/10"
                         }`}
                       >
                         {activity.type === "chat" ? (
                           <MessageSquare className="h-6 w-6 text-primary" />
+                        ) : activity.type === "word" ? (
+                          <BookOpen className="h-6 w-6 text-emerald-600" />
                         ) : (
                           <BookOpen className="h-6 w-6 text-secondary" />
                         )}
@@ -354,6 +400,42 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                 )}
               </CardContent>
             </Card>
+            <div className="mt-8">
+              <h2 className="mb-4 font-bold text-2xl">Word Bank</h2>
+              <Card className="border-2">
+                <CardContent className="space-y-4 pt-6">
+                  {child.words.length > 0 ? (
+                    child.words.map((word) => {
+                      const reviewedDate = word.lastReviewedAt ? new Date(word.lastReviewedAt) : null
+                      return (
+                        <div key={word.id} className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-lg capitalize text-emerald-800">{word.word}</p>
+                            <Badge
+                              variant={word.mastered ? "secondary" : "outline"}
+                              className={word.mastered ? "bg-emerald-500 text-white" : "text-emerald-700"}
+                            >
+                              {word.mastered ? "Mastered" : "Review"}
+                            </Badge>
+                          </div>
+                          {word.simpleDefinition ? (
+                            <p className="mt-2 text-sm text-muted-foreground">{word.simpleDefinition}</p>
+                          ) : word.definition ? (
+                            <p className="mt-2 text-sm text-muted-foreground">{word.definition}</p>
+                          ) : null}
+                          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                            <span>Reviews: {word.timesReviewed}</span>
+                            {reviewedDate ? <span>Last practiced: {formatDate(reviewedDate)}</span> : null}
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <p className="py-8 text-center text-muted-foreground">No words learned yet.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
 
