@@ -436,6 +436,34 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                 </CardContent>
               </Card>
             </div>
+
+            {/* Stories for Reading Practice */}
+            <div className="mt-8">
+              <h2 className="mb-4 font-bold text-2xl">Stories for Reading Practice</h2>
+              <Card className="border-2">
+                <CardContent className="space-y-6 pt-6">
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-4">
+                    <h3 className="font-semibold text-lg text-blue-800 mb-2">The Quick Brown Fox</h3>
+                    <p className="text-sm text-muted-foreground">
+                      The quick brown fox jumps over the lazy dog. The dog barked, but the fox was too quick!
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-4">
+                    <h3 className="font-semibold text-lg text-blue-800 mb-2">The Dog and the Bone</h3>
+                    <p className="text-sm text-muted-foreground">
+                      A dog found a bone and was very happy. But when he saw his reflection in the water, he thought it was another dog with a bigger bone. He barked, and his bone fell into the water!
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-4">
+                    <h3 className="font-semibold text-lg text-blue-800 mb-2">The Ant and the Dove</h3>
+                    <p className="text-sm text-muted-foreground">
+                      An ant fell into a stream and was in danger. A dove saw the ant and dropped a leaf into the water. The ant climbed onto the leaf and was safe.
+                    </p>
+                  </div>
+                  {/* Add more stories as needed */}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
 

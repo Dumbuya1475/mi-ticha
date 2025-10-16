@@ -1,6 +1,7 @@
 "use client"
 
 import { use, useCallback, useEffect, useRef, useState } from "react"
+import { Mic, MicOff } from "lucide-react"
 import type { ChangeEvent, FormEvent } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -138,6 +139,43 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
   const searchParams = useSearchParams()
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, setInput } = useSimpleChat({
+  // Voice input state
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // Voice input handler
+  const startListening = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition not supported in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    recognition.onresult = (event: any) => {
+      const transcript = event?.results?.[0]?.[0]?.transcript as string | undefined;
+      if (transcript) {
+        setInput(transcript);
+      }
+      setIsListening(false);
+    };
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current?.abort?.();
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  };
+  const stopListening = () => {
+    recognitionRef.current?.stop?.();
+    setIsListening(false);
+  };
     api: "/api/chat",
     body: {
       studentId: id,
@@ -391,8 +429,8 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
         </div>
       </header>
 
-      <main className="flex-1">
-        <div className="mx-auto max-w-5xl px-4 py-6">
+      <main className="flex-1 relative">
+        <div className="mx-auto max-w-5xl px-2 sm:px-4 py-6 pb-36">
           {mode === "reading" && (
             <Card className="mb-6 border-2 border-accent bg-white p-6 shadow-md">
               <div className="space-y-4">
@@ -435,25 +473,22 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
           )}
 
           <div className="space-y-4">
-            {messages.map((message) => (
+            {messages.map((message, idx) => (
               <div
                 key={message.id}
-                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex w-full ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-2xl p-4 shadow-md ${
-                    message.role === "user"
-                      ? "bg-blue-600 text-white"
-                      : "border-2 border-green-200 bg-white text-gray-800"
-                  }`}
+                  className={`relative max-w-[85%] rounded-2xl px-4 py-3 shadow-md transition-all
+                    ${message.role === "user"
+                      ? "bg-gradient-to-br from-blue-600 to-blue-500 text-white rounded-br-none"
+                      : "bg-white border-2 border-green-200 text-gray-800 rounded-bl-none"}
+                  `}
                 >
                   {message.role === "assistant" && (
-                    <div className="mb-3 flex items-center gap-2 border-b border-gray-200 pb-2">
+                    <div className="mb-2 flex items-center gap-2">
                       <span className="text-3xl">🤖</span>
-                      <div>
-                        <p className="text-lg font-bold text-blue-600">Moe</p>
-                        <p className="text-xs text-gray-500">Your AI Teacher</p>
-                      </div>
+                      <span className="font-bold text-blue-600">Moe</span>
                     </div>
                   )}
                   <p className="whitespace-pre-wrap text-base leading-relaxed">{message.content}</p>
@@ -461,23 +496,16 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
                     <button
                       type="button"
                       onClick={() => speakText(message.content)}
-                      className="mt-3 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700"
+                      className="mt-2 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700"
                     >
                       <Volume2 className="h-4 w-4" />
                       Read aloud
                     </button>
                   )}
-                  <p
-                    className={`mt-2 text-xs opacity-60 ${
-                      message.role === "user" ? "text-blue-100" : "text-gray-500"
-                    }`}
-                  >
-                    {formatTimestamp(message.timestamp)}
-                  </p>
+                  <span className={`absolute -bottom-5 text-xs opacity-60 ${message.role === "user" ? "right-2 text-blue-100" : "left-2 text-gray-500"}`}>{formatTimestamp(message.timestamp)}</span>
                 </div>
               </div>
             ))}
-
             {isLoading && (
               <div className="flex justify-start">
                 <div className="rounded-2xl border-2 border-green-200 bg-white p-4 shadow-md">
@@ -501,9 +529,9 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
       </main>
 
       {mode !== "reading" && (
-        <footer className="border-t-4 border-orange-400 bg-white p-4 shadow-lg">
+        <footer className="fixed bottom-0 left-0 right-0 z-20 border-t-4 border-orange-400 bg-white/95 p-4 shadow-2xl">
           <div className="mx-auto max-w-5xl">
-            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <div className="mb-3 grid gap-3 sm:grid-cols-3">
               {suggestionButtons.map(({ label, prompt, icon: Icon, bg, hover, text, border, modeOverride }) => (
                 <button
                   key={label}
@@ -516,24 +544,35 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
                 </button>
               ))}
             </div>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
+            <form onSubmit={handleSubmit} className="flex items-center gap-2 bg-white rounded-xl border-2 border-gray-200 px-2 py-1 shadow-lg">
+              <button
+                type="button"
+                onClick={isListening ? stopListening : startListening}
+                className={`rounded-full p-2 transition-colors ${isListening ? "bg-red-100 text-red-600" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}
+                tabIndex={-1}
+                aria-label={isListening ? "Stop voice input" : "Start voice input"}
+              >
+                {isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+              </button>
               <input
                 type="text"
                 value={input}
                 onChange={handleInputChange}
                 placeholder={mode === "homework" ? "Ask Moe anything..." : "Ask Moe to help with reading..."}
-                className="flex-1 rounded-xl border-[3px] border-gray-300 px-6 py-4 text-lg shadow-sm outline-none focus:border-blue-500"
+                className="flex-1 rounded-xl border-none px-4 py-3 text-lg outline-none bg-transparent"
                 disabled={isLoading}
+                autoFocus
               />
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading}
                 className="flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 p-4 text-white shadow-lg transition-all hover:from-blue-700 hover:to-blue-800 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed"
+                aria-label="Send message"
               >
                 <Send className="h-6 w-6" />
               </button>
             </form>
-            <p className="mt-3 text-center text-xs text-gray-500">💡 Tip: Ask clear questions for better answers</p>
+            <p className="mt-2 text-center text-xs text-gray-500">💡 Tip: Ask clear questions for better answers</p>
           </div>
         </footer>
       )}

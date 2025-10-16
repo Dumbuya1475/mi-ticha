@@ -224,16 +224,25 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
     })
   }
 
+  // Moe's voice: male, slower
   const speakText = (text: string) => {
     if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) {
       return false
     }
-
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 0.85
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
-    return true
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.7; // slower
+    utterance.pitch = 1;
+    // Try to select a male voice
+    const voices = synth.getVoices();
+    const male = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male"))
+      || voices.find(v => v.lang.startsWith("en") && v.gender === "male")
+      || voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("david"))
+      || voices.find(v => v.lang.startsWith("en"));
+    if (male) utterance.voice = male;
+    synth.speak(utterance);
+    return true;
   }
 
   const speakSpelling = (rawWord: string) => {
@@ -554,8 +563,11 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
             <Card className="border-2 border-purple-200">
               <CardContent className="flex items-start gap-3 pt-6">
                 <div className="text-2xl">💡</div>
-                <div>
-                  <h3 className="mb-2 text-lg font-bold text-gray-800">More detail:</h3>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="mb-2 text-lg font-bold text-gray-800">More detail:</h3>
+                    <Button size="icon" variant="ghost" onClick={() => speakText(wordDetails?.definition ?? "")}>🔊</Button>
+                  </div>
                   <p className="leading-relaxed text-gray-700">{wordDetails?.definition}</p>
                 </div>
               </CardContent>
@@ -565,8 +577,11 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
               <Card className="border-2 border-orange-200">
                 <CardContent className="flex items-start gap-3 pt-6">
                   <div className="text-2xl">📝</div>
-                  <div>
-                    <h3 className="mb-2 text-lg font-bold text-gray-800">Example sentence:</h3>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <h3 className="mb-2 text-lg font-bold text-gray-800">Example sentence:</h3>
+                      <Button size="icon" variant="ghost" onClick={() => speakText(wordDetails?.example ?? "")}>🔊</Button>
+                    </div>
                     <p className="italic leading-relaxed text-gray-700">“{wordDetails.example}”</p>
                   </div>
                 </CardContent>
@@ -576,8 +591,11 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
             <Card className="border-2 border-yellow-300 bg-yellow-50">
               <CardContent className="flex items-start gap-3 pt-6">
                 <div className="text-2xl">🧠</div>
-                <div>
-                  <h3 className="mb-2 text-lg font-bold text-gray-800">Memory trick:</h3>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="mb-2 text-lg font-bold text-gray-800">Memory trick:</h3>
+                    <Button size="icon" variant="ghost" onClick={() => speakText(wordDetails?.memoryTip ?? "")}>🔊</Button>
+                  </div>
                   <p className="leading-relaxed text-gray-700">{wordDetails?.memoryTip}</p>
                 </div>
               </CardContent>
@@ -585,7 +603,10 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
           </div>
 
           <div>
-            <h3 className="mb-3 font-bold text-gray-800">Words that go together:</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="mb-3 font-bold text-gray-800">Words that go together:</h3>
+              <Button size="icon" variant="ghost" onClick={() => speakText((wordDetails?.relatedWords || []).join(", "))}>🔊</Button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {wordDetails?.relatedWords.map((word) => (
                 <span key={word} className="rounded-full border-2 border-blue-200 bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700">

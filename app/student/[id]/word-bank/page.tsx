@@ -1,6 +1,7 @@
 "use client"
 
-import { use, useCallback, useEffect, useMemo, useState } from "react"
+import * as React from "react";
+import { use, useCallback, useEffect, useMemo, useState, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { BookMarked, CheckCircle2, Clock, History, Sparkles, ArrowLeft } from "lucide-react"
@@ -40,7 +41,8 @@ export default function WordBankPage({ params }: { params: Promise<{ id: string 
   const [words, setWords] = useState<WordEntry[]>([])
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"all" | "mastered" | "review">("all")
+  const [mainTab, setMainTab] = useState<'practice' | 'words'>('practice')
+  const [wordsTab, setWordsTab] = useState<'all' | 'mastered' | 'review'>('all')
 
   const loadWordBank = useCallback(async () => {
     try {
@@ -91,10 +93,10 @@ export default function WordBankPage({ params }: { params: Promise<{ id: string 
   const reviewCount = words.length - masteredCount
 
   const filteredWords = words.filter((word) => {
-    if (activeTab === "mastered") {
+    if (wordsTab === "mastered") {
       return word.mastered
     }
-    if (activeTab === "review") {
+    if (wordsTab === "review") {
       return !word.mastered
     }
     return true
@@ -162,25 +164,35 @@ export default function WordBankPage({ params }: { params: Promise<{ id: string 
           </Card>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-4">
+        <Tabs value={mainTab} onValueChange={(value) => setMainTab(value as typeof mainTab)} className="space-y-4">
           <TabsList className="bg-white">
-            <TabsTrigger value="all">All words</TabsTrigger>
-            <TabsTrigger value="mastered">Mastered</TabsTrigger>
-            <TabsTrigger value="review">Need practice</TabsTrigger>
+            <TabsTrigger value="practice">Practice Missions</TabsTrigger>
+            <TabsTrigger value="words">All Words</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="all">
-            <WordGrid words={filteredWords} emptyMessage="You haven't added any words yet. Tap Hear It to start building your word bank." />
+          <TabsContent value="practice">
+            <PracticeMissions studentId={id} words={words} refreshWordBank={loadWordBank} />
           </TabsContent>
-          <TabsContent value="mastered">
-            <WordGrid words={filteredWords} emptyMessage="Master a word to see it shine here." />
-          </TabsContent>
-          <TabsContent value="review">
-            <WordGrid words={filteredWords} emptyMessage="Words you're practicing will appear here." />
+
+          <TabsContent value="words">
+            <Tabs value={wordsTab} onValueChange={(value) => setWordsTab(value as typeof wordsTab)} className="space-y-2">
+              <TabsList className="bg-white">
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="mastered">Mastered</TabsTrigger>
+                <TabsTrigger value="review">Need Practice</TabsTrigger>
+              </TabsList>
+              <TabsContent value="all">
+                <WordGrid words={filteredWords} emptyMessage="You haven't added any words yet. Tap Hear It to start building your word bank." />
+              </TabsContent>
+              <TabsContent value="mastered">
+                <WordGrid words={filteredWords} emptyMessage="Master a word to see it shine here." />
+              </TabsContent>
+              <TabsContent value="review">
+                <WordGrid words={filteredWords} emptyMessage="Words you're practicing will appear here." />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
-
-        <PracticeMissions studentId={id} words={words} refreshWordBank={loadWordBank} />
 
         <Card className="mt-8 border-2 border-primary/20 bg-white">
           <CardHeader>
@@ -226,6 +238,12 @@ function PracticeMissions({
   words: WordEntry[]
   refreshWordBank: () => Promise<void>
 }) {
+  // --- Microphone state for Spell It Out ---
+  const [isSpellListening, setIsSpellListening] = useState(false);
+  const [isPronounceListening, setIsPronounceListening] = useState(false);
+  const spellRecognitionRef = useRef<any>(null);
+  const pronounceRecognitionRef = useRef<any>(null);
+
   const [activePracticeTab, setActivePracticeTab] = useState<"spell" | "identify" | "pronounce">("spell")
   const [spellTarget, setSpellTarget] = useState<WordEntry | null>(null)
   const [spellInput, setSpellInput] = useState("")
@@ -243,6 +261,18 @@ function PracticeMissions({
     const active = words.filter((entry) => !entry.mastered)
     return active.length > 0 ? active : words
   }, [words])
+
+  // Helper: Moe speaks a message
+  const speakMoe = useCallback((text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    const utterance = new window.SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    synth.speak(utterance);
+  }, []);
 
   const speakWord = useCallback((word: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) {
@@ -356,6 +386,87 @@ function PracticeMissions({
     speakWord(target.word)
   }, [pickPracticeWord, speakWord])
 
+  // Microphone for Spell It Out
+  const startSpellListening = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpellFeedback({ type: "error", message: "Speech recognition not supported in this browser." });
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    recognition.onresult = (event: any) => {
+      const transcript = event?.results?.[0]?.[0]?.transcript as string | undefined;
+      if (transcript) {
+        setSpellInput(transcript);
+        setSpellFeedback(null);
+      }
+      setIsSpellListening(false);
+    };
+    recognition.onerror = () => {
+      setSpellFeedback({ type: "error", message: "We couldn't hear clearly. Try again or type the word." });
+      setIsSpellListening(false);
+    };
+    recognition.onend = () => setIsSpellListening(false);
+    spellRecognitionRef.current?.abort?.();
+    spellRecognitionRef.current = recognition;
+    recognition.start();
+    setIsSpellListening(true);
+  };
+  const stopSpellListening = () => {
+    spellRecognitionRef.current?.stop?.();
+    setIsSpellListening(false);
+  };
+
+  // Microphone for Say It Loud
+  const startPronounceListening = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setPronounceFeedback({ type: "error", message: "Speech recognition not supported in this browser." });
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    recognition.onresult = (event: any) => {
+      const transcript = event?.results?.[0]?.[0]?.transcript as string | undefined;
+      if (transcript && pronounceTarget) {
+        // Compare transcript to target word
+        const userSaid = transcript.trim().toLowerCase();
+        const correct = pronounceTarget.word.trim().toLowerCase();
+        if (userSaid === correct) {
+          setPronounceFeedback({ type: "success", message: `Correct! You said ${pronounceTarget.word}.` });
+          speakMoe(`Correct! You said ${pronounceTarget.word}.`);
+        } else {
+          setPronounceFeedback({ type: "error", message: `Try again! Moe heard: ${transcript}` });
+          speakMoe("Try again! That's not quite right.");
+        }
+      }
+      setIsPronounceListening(false);
+    };
+    recognition.onerror = () => {
+      setPronounceFeedback({ type: "error", message: "We couldn't hear clearly. Try again or say the word." });
+      speakMoe("Try again! I couldn't hear you.");
+      setIsPronounceListening(false);
+    };
+    recognition.onend = () => setIsPronounceListening(false);
+    pronounceRecognitionRef.current?.abort?.();
+    pronounceRecognitionRef.current = recognition;
+    recognition.start();
+    setIsPronounceListening(true);
+  };
+  const stopPronounceListening = () => {
+    pronounceRecognitionRef.current?.stop?.();
+    setIsPronounceListening(false);
+  };
+
   const submitSpelling = useCallback(async () => {
     if (!spellTarget) {
       setSpellFeedback({ type: "info", message: "Start a challenge first." })
@@ -375,13 +486,16 @@ function PracticeMissions({
       })
       if (ok) {
         setSpellFeedback({ type: "success", message: `${spellTarget.word} is mastered! Great spelling.` })
+        speakMoe(`Correct! You spelled ${spellTarget.word}.`);
         setSpellTarget(null)
         setSpellInput("")
       } else {
         setSpellFeedback({ type: "error", message: "Couldn't save your score. Try once more." })
+        speakMoe("Sorry, couldn't save your score. Try again.");
       }
     } else {
       setSpellFeedback({ type: "error", message: "Not quite. Listen again and try spelling it slowly." })
+      speakMoe("Try again! That's not quite right.");
     }
   }, [logWordActivity, spellInput, spellTarget])
 
@@ -512,7 +626,7 @@ function PracticeMissions({
 
           <TabsContent value="spell" className="space-y-4 pt-4">
             <p className="text-sm text-muted-foreground">
-              Moe says a word without showing it. Type the spelling and lock it in to earn a mastery badge.
+              Moe says a word without showing it. Type or say the spelling and lock it in to earn a mastery badge.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button onClick={startSpellChallenge} disabled={isLogging}>
@@ -525,6 +639,13 @@ function PracticeMissions({
               >
                 Hear it again
               </Button>
+              <Button
+                variant={isSpellListening ? "destructive" : "outline"}
+                onClick={() => (isSpellListening ? stopSpellListening() : startSpellListening())}
+                disabled={!spellTarget}
+              >
+                {isSpellListening ? "Stop Mic" : "🎤 Spell by Voice"}
+              </Button>
             </div>
             {spellTarget ? (
               <div className="space-y-3">
@@ -534,7 +655,7 @@ function PracticeMissions({
                 <Input
                   value={spellInput}
                   onChange={(event) => setSpellInput(event.target.value)}
-                  placeholder="Type the word here"
+                  placeholder="Type or say the word here"
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault()
@@ -589,7 +710,7 @@ function PracticeMissions({
 
           <TabsContent value="pronounce" className="space-y-4 pt-4">
             <p className="text-sm text-muted-foreground">
-              Moe spells a word letter by letter. Say it out loud, then mark your progress.
+              Moe spells a word letter by letter. Say it out loud, use the mic, and Moe will check if you got it!
             </p>
             <div className="flex flex-wrap gap-2">
               <Button onClick={startPronounceRound} disabled={isLogging}>
@@ -601,6 +722,13 @@ function PracticeMissions({
                 disabled={!pronounceTarget}
               >
                 Hear spelling again
+              </Button>
+              <Button
+                variant={isPronounceListening ? "destructive" : "outline"}
+                onClick={() => (isPronounceListening ? stopPronounceListening() : startPronounceListening())}
+                disabled={!pronounceTarget}
+              >
+                {isPronounceListening ? "Stop Mic" : "🎤 Say with Mic"}
               </Button>
               {pronounceTarget && !pronounceRevealed ? (
                 <Button variant="ghost" onClick={() => setPronounceRevealed(true)}>
