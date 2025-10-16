@@ -132,15 +132,6 @@ export default function HomePage() {
 
           <div className="grid items-center gap-12 md:grid-cols-[1.05fr_0.95fr]">
             <div className="space-y-8">
-                          <Badge
-              variant="outline"
-              className="border-blue-200 bg-blue-50 text-blue-700"
-            >
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-500 ">
-                For families
-              </p>
-            </Badge>{" "}
-
               <Badge
                 variant="secondary"
                 className="bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.3em]  text-white"

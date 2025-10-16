@@ -1,5 +1,8 @@
+import { createRequire } from "node:module"
 import withPWAInit from "next-pwa"
-import runtimeCaching from "next-pwa/cache"
+
+const require = createRequire(import.meta.url)
+const runtimeCaching = require("next-pwa/cache.js")
 
 const withPWA = withPWAInit({
   dest: "public",
