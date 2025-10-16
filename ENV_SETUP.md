@@ -10,9 +10,9 @@ Mi Ticha uses environment variables to securely store API keys, database credent
 
 In the root directory of your project, create a file named `.env.local`:
 
-\`\`\`bash
+```bash
 touch .env.local
-\`\`\`
+```
 
 ## Step 2: Supabase Configuration
 
@@ -33,7 +33,7 @@ Since you've already created a Supabase project, you'll need to get your project
 
 Add the following variables to your `.env.local` file:
 
-\`\`\`bash
+```bash
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=your_project_url_here
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
@@ -43,51 +43,41 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 
 # Development redirect URL for email confirmations
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000
-\`\`\`
+```
 
 ### Example .env.local File
 
-\`\`\`bash
+```bash
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG1ub3AiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYxNjE2MTYxNiwiZXhwIjoxOTMxNzM3NjE2fQ.example_key_here
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example_service_role_key_here
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000
-\`\`\`
 
-## Step 3: Additional Environment Variables (Optional)
+# Groq API Key (for AI tutoring features)
+Groq_API_KEY=your_openai_api_key_here
 
-Depending on your implementation, you may need additional environment variables:
-
-### AI Integration (if using AI features)
-
-\`\`\`bash
-# OpenAI API Key (for AI tutoring features)
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Or other AI providers
-ANTHROPIC_API_KEY=your_anthropic_key_here
-\`\`\`
+```
 
 ### Analytics (Optional)
 
-\`\`\`bash
+```bash
 # Vercel Analytics
 NEXT_PUBLIC_VERCEL_ANALYTICS_ID=your_analytics_id_here
-\`\`\`
+```
 
 ### Other Services
 
-\`\`\`bash
+```bash
 # Email service (if using)
 RESEND_API_KEY=your_resend_api_key_here
 
 # File storage (if not using Supabase Storage)
 # WARNING: Keep this server-side only - do NOT use NEXT_PUBLIC_ prefix
 BLOB_READ_WRITE_TOKEN=your_blob_token_here
-\`\`\`
+```
 
-## Step 4: Supabase Database Setup
+## Step 3: Supabase Database Setup
 
 After configuring your environment variables, you'll need to set up your database schema in Supabase.
 
@@ -105,7 +95,7 @@ If you have SQL migration scripts in your project, you can run them directly fro
 
 Here's a basic schema to get started (customize based on your needs):
 
-\`\`\`sql
+```sql
 -- Users table (extends Supabase auth.users)
 CREATE TABLE public.profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
@@ -156,16 +146,16 @@ CREATE POLICY "Users can view own profile" ON public.profiles
 
 CREATE POLICY "Parents can view their students" ON public.students
   FOR SELECT USING (auth.uid() = parent_id);
-\`\`\`
+```
 
 ## Step 5: Verify Configuration
 
 After setting up your `.env.local` file:
 
 1. Restart your development server:
-   \`\`\`bash
+   ```bash
    npm run dev
-   \`\`\`
+   ```
 
 2. Check the console for any environment variable errors
 
