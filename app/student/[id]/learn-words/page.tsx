@@ -568,11 +568,17 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-blue-50 to-green-50 py-8">
       {CelebrationOverlay}
 
-      <div className="mx-auto mb-6 flex max-w-4xl flex-col gap-3 px-6 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="ghost" className="w-fit gap-2" onClick={() => router.push(`/student/${id}`)}>
-          <ArrowLeft className="h-4 w-4" /> Back to activities
-        </Button>
-        <div className="overflow-x-auto rounded-xl bg-white p-3 shadow-md">
+      <div className="mx-auto mb-6 max-w-4xl px-6">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            className="w-fit gap-2 absolute left-4 top-4 sm:static sm:left-auto sm:top-auto"
+            onClick={() => router.push(`/student/${id}`)}
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to activities
+          </Button>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-xl bg-white p-3 shadow-md">
           <div className="flex gap-2">
             {STEPS.map(({ label, state }) => (
               <button

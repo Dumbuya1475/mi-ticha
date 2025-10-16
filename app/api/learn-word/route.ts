@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
+import { generateText } from "ai"
 import { createClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error("Supabase credentials are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
+  throw new Error(
+    "Supabase credentials are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+  )
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -24,12 +27,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Word cannot be empty" }, { status: 400 })
     }
 
-    const dictionaryEntry = await fetchDictionaryEntry(cleanWord)
+    const wordDetails = await resolveWordDetails(cleanWord)
 
-    if (!dictionaryEntry) {
+    if (!wordDetails) {
       return NextResponse.json(
         {
-          error: "We couldn't find that word in the dictionary. Try a different word or double-check the spelling.",
+          error:
+            "Moe couldn't find that word yet. Try another spelling or a different word while Moe keeps learning!",
         },
         { status: 404 },
       )
@@ -40,9 +44,9 @@ export async function POST(request: NextRequest) {
       error: existingError,
     } = await supabase
       .from("words_learned")
-      .select("id, mastered, times_reviewed, metadata")
+      .select("id, mastered, times_reviewed")
       .eq("student_id", studentId)
-      .eq("word", dictionaryEntry.word)
+      .eq("word", wordDetails.word)
       .maybeSingle()
 
     if (existingError) {
@@ -53,48 +57,32 @@ export async function POST(request: NextRequest) {
     const timesReviewed = (existingRow?.times_reviewed || 0) + 1
     const mastered = existingRow?.mastered ?? false
 
-    const upsertPayload = {
-      student_id: studentId,
-      word: dictionaryEntry.word,
-      definition: dictionaryEntry.definition,
-      example_sentence: dictionaryEntry.example,
-      pronunciation: dictionaryEntry.pronunciation,
-      mastered,
-      times_reviewed: timesReviewed,
-      last_reviewed_at: new Date().toISOString(),
-      metadata: {
-        ...(existingRow?.metadata as Record<string, unknown> | null),
-        simpleDefinition: dictionaryEntry.simpleDefinition,
-        memoryTip: dictionaryEntry.memoryTip,
-        relatedWords: dictionaryEntry.relatedWords,
-        difficulty: dictionaryEntry.difficulty,
-        audioUrl: dictionaryEntry.audioUrl,
+    const { error: upsertError } = await supabase.from("words_learned").upsert(
+      {
+        student_id: studentId,
+        word: wordDetails.word,
+        definition: wordDetails.definition,
+        example_sentence: wordDetails.example,
+        pronunciation: wordDetails.pronunciation,
+        mastered,
+        times_reviewed: timesReviewed,
+        last_reviewed_at: new Date().toISOString(),
       },
-    }
-
-    const { error: upsertError } = await supabase.from("words_learned").upsert(upsertPayload, {
-      onConflict: "student_id,word",
-    })
+      {
+        onConflict: "student_id,word",
+      },
+    )
 
     if (upsertError) {
       console.error("[v0] Failed to upsert word:", upsertError)
       return NextResponse.json({ error: "Unable to save this word right now" }, { status: 500 })
     }
 
-    const { error: logError } = await supabase.from("word_learning_sessions").insert({
-      student_id: studentId,
-      word: dictionaryEntry.word,
-      status: "started",
-      payload: dictionaryEntry,
-    })
-
-    if (logError) {
-      console.error("[v0] Failed to log word learning session:", logError)
-    }
+    await logWordLearningEvent(studentId, wordDetails.word, "lookup", wordDetails)
 
     return NextResponse.json({
       wordDetails: {
-        ...dictionaryEntry,
+        ...wordDetails,
         timesReviewed,
         alreadyMastered: mastered,
       },
@@ -117,7 +105,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data: existingRow, error: fetchError } = await supabase
       .from("words_learned")
-      .select("id, mastered, times_reviewed, metadata")
+      .select("id, mastered, times_reviewed")
       .eq("student_id", studentId)
       .eq("word", cleanWord)
       .maybeSingle()
@@ -148,16 +136,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Unable to update this word" }, { status: 500 })
     }
 
-    const { error: logError } = await supabase.from("word_learning_sessions").insert({
-      student_id: studentId,
-      word: cleanWord,
-      status: outcome === "mastered" ? "mastered" : "needs_review",
-      payload: { outcome },
-    })
-
-    if (logError) {
-      console.error("[v0] Failed to log outcome:", logError)
-    }
+    await logWordLearningEvent(studentId, cleanWord, outcome === "mastered" ? "mastered" : "needs_review")
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -166,7 +145,55 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-async function fetchDictionaryEntry(word: string) {
+async function logWordLearningEvent(
+  studentId: string,
+  word: string,
+  status: string,
+  payload?: Record<string, unknown>,
+) {
+  try {
+    const { error } = await supabase.from("word_learning_sessions").insert({
+      student_id: studentId,
+      word,
+      status,
+      payload: payload ?? null,
+    })
+
+    if (error && error.code !== "42P01") {
+      console.error("[v0] Failed to log word learning session:", error)
+    }
+  } catch (error) {
+    console.error("[v0] Unexpected error logging word learning session:", error)
+  }
+}
+
+type WordDetails = {
+  word: string
+  pronunciation: string
+  definition: string
+  simpleDefinition: string
+  example: string
+  memoryTip: string
+  relatedWords: string[]
+  difficulty: string
+  audioUrl?: string | null
+}
+
+async function resolveWordDetails(word: string): Promise<WordDetails | null> {
+  const dictionaryEntry = await fetchDictionaryEntry(word)
+  if (dictionaryEntry) {
+    return dictionaryEntry
+  }
+
+  const aiEntry = await fetchAIEntry(word)
+  if (aiEntry) {
+    return aiEntry
+  }
+
+  return null
+}
+
+async function fetchDictionaryEntry(word: string): Promise<WordDetails | null> {
   try {
     const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`)
 
@@ -189,9 +216,8 @@ async function fetchDictionaryEntry(word: string) {
     }
 
     const synonyms = (meaning?.synonyms ?? []).slice(0, 6)
-    const simplifiedDefinition = definition.definition.length > 120
-      ? `${definition.definition.slice(0, 117)}...`
-      : definition.definition
+    const simplifiedDefinition =
+      definition.definition.length > 140 ? `${definition.definition.slice(0, 137)}...` : definition.definition
 
     const pronunciation = entry.phonetic || entry.phonetics?.find((item) => item.text)?.text || word
     const audioUrl = entry.phonetics?.find((item) => item.audio)?.audio
@@ -210,6 +236,71 @@ async function fetchDictionaryEntry(word: string) {
     }
   } catch (error) {
     console.error("[v0] Dictionary lookup failed:", error)
+    return null
+  }
+}
+
+async function fetchAIEntry(word: string): Promise<WordDetails | null> {
+  try {
+    const { text } = await generateText({
+      model: "groq/llama-3.1-70b-versatile",
+      prompt: `You are Moe, an enthusiastic tutor for 8-14 year old students in Sierra Leone. A student asked to learn the word "${word}".
+
+Respond with a single JSON object using this exact shape:
+{
+  "word": string (lowercase),
+  "pronunciation": string (friendly syllables),
+  "definition": string (clear but rich),
+  "simpleDefinition": string (one short kid-friendly sentence),
+  "example": string (one sentence, local context, no quotes),
+  "memoryTip": string (fun way to remember),
+  "relatedWords": string[] (3-5 simple words),
+  "difficulty": "easy" | "medium" | "advanced"
+}
+
+Keep the response strictly JSON with double quotes and no code fences.`,
+    })
+
+    const parsed = safeJsonParse<WordDetails>(text)
+
+    if (!parsed) {
+      return fallbackAIEntry(word)
+    }
+
+    return {
+      ...parsed,
+      word: parsed.word?.toLowerCase() ?? word.toLowerCase(),
+      relatedWords: Array.isArray(parsed.relatedWords) && parsed.relatedWords.length > 0
+        ? parsed.relatedWords.slice(0, 6)
+        : buildFallbackRelatedWords(word),
+      difficulty: parsed.difficulty ?? determineDifficulty(word),
+    }
+  } catch (error) {
+    console.error("[v0] AI lookup failed:", error)
+    return fallbackAIEntry(word)
+  }
+}
+
+function fallbackAIEntry(word: string): WordDetails {
+  return {
+    word: word.toLowerCase(),
+    pronunciation: buildSyllablePronunciation(word),
+    definition: `${capitalize(word)} is an important word to learn. It describes something you may see or use in daily life.`,
+    simpleDefinition: `${capitalize(word)} means something helpful to know about.`,
+    example: `I used the word ${word.toLowerCase()} when I talked about school today.`,
+    memoryTip: buildMemoryTip(word),
+    relatedWords: buildFallbackRelatedWords(word),
+    difficulty: determineDifficulty(word),
+    audioUrl: undefined,
+  }
+}
+
+function safeJsonParse<T>(text: string): T | null {
+  try {
+    const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim()
+    return JSON.parse(cleaned) as T
+  } catch (error) {
+    console.warn("[v0] Failed to parse AI JSON:", error)
     return null
   }
 }
@@ -235,6 +326,16 @@ function determineDifficulty(word: string) {
   if (word.length <= 4) return "easy"
   if (word.length <= 7) return "medium"
   return "advanced"
+}
+
+function buildSyllablePronunciation(word: string) {
+  const syllables = word.match(/[^aeiouy]*[aeiouy]+/gi) || [word]
+  return syllables.join("-")
+}
+
+function capitalize(value: string) {
+  if (!value) return value
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 interface DictionaryResult {

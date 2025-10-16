@@ -14,7 +14,8 @@
   --popover-foreground: oklch(0.15 0 0);
 
   /* Primary: Friendly Sky Blue #42A5F5 */
-  --primary: oklch(0.68 0.15 250);
+  --primary: red;
+  /* --primary: oklch(0.68 0.15 250); */
   --primary-foreground: oklch(1 0 0);
 
   /* Secondary: Sunshine Yellow #FFEB3B */

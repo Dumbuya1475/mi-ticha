@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useRef, useState } from "react"
+import { FormEvent, use, useEffect, useRef, useState } from "react"
 import {
   Calculator,
   Volume2,
@@ -12,8 +12,9 @@ import {
   RefreshCw,
   HelpCircle,
 } from "lucide-react"
+import { createBrowserClient } from "@/lib/supabase/client"
 
-type ViewState = "question" | "solving" | "practice" | "success"
+type ViewState = "entry" | "question" | "solving" | "practice" | "success"
 
 type Step = {
   title: string
@@ -24,80 +25,78 @@ type Step = {
 
 type PracticeProblem = {
   question: string
-  answer: number
+  answer: string
   hint: string
 }
 
-type Problem = {
+type TutorProblem = {
   question: string
-  difficulty: string
-  type: string
-  answer: number
+  topic: string
+  difficulty: "easy" | "medium" | "hard"
+  answer: string
   steps: Step[]
   realWorldExample: string
   practiceProblems: PracticeProblem[]
+  encouragement: string
 }
 
-const PROBLEM: Problem = {
-  question: "What is 234 ÷ 6?",
-  difficulty: "medium",
-  type: "division",
-  answer: 39,
+const FALLBACK_PROBLEM: TutorProblem = {
+  question: "What is 24 ÷ 6?",
+  topic: "division",
+  difficulty: "easy",
+  answer: "4",
   steps: [
     {
-      title: "Understand the problem",
-      explanation: "We need to divide 234 by 6. This means: How many groups of 6 can we make from 234?",
-      visual: "234 ÷ 6 = ?",
-      tip: "Division means splitting into equal groups",
+      title: "Understand the question",
+      explanation: "We want to know how many groups of 6 fit inside 24.",
+      visual: "24 ÷ 6 = ?",
+      tip: "Division means sharing equally.",
     },
     {
-      title: "Set it up",
-      explanation: "Let's write it like a division problem. We'll divide step by step.",
-      visual: "6 ) 234",
-      tip: "Start from the left side of the number",
+      title: "Think in multiplication",
+      explanation: "Ask: 6 times what number equals 24?",
+      visual: "6 × ? = 24",
+      tip: "Use the times table you already know.",
     },
     {
-      title: "Divide the first part",
-      explanation:
-        "How many 6s fit in 23? Let's count: 6×1=6, 6×2=12, 6×3=18, 6×4=24 (too big!)\nSo 3 times! Write 3 on top.",
-      visual: "    3\n6 ) 234\n   -18\n    --\n     5",
-      tip: "6 × 3 = 18, and 23 - 18 = 5",
+      title: "Find the match",
+      explanation: "We know 6 × 4 = 24, so the answer is 4.",
+      visual: "6 × 4 = 24",
+      tip: "Work carefully to avoid mistakes.",
     },
     {
-      title: "Bring down the next digit",
-      explanation: "Bring down the 4. Now we have 54.",
-      visual: "    3\n6 ) 234\n   -18↓\n    --\n     54",
-      tip: "Always bring down the next number",
-    },
-    {
-      title: "Divide again",
-      explanation: "How many 6s in 54? Let's see: 6×9=54. Exactly 9 times! Write 9 next to the 3.",
-      visual: "    39\n6 ) 234\n   -18\n    --\n     54\n    -54\n    ---\n      0",
-      tip: "6 × 9 = 54, perfect! No remainder!",
-    },
-    {
-      title: "Check your answer",
-      explanation: "Let's verify: 39 × 6 should equal 234.\n39 × 6 = (30 × 6) + (9 × 6) = 180 + 54 = 234 ✓",
-      visual: "39 × 6 = 234 ✓",
-      tip: "Always check by multiplying back!",
+      title: "Check yourself",
+      explanation: "Multiply the answer back: 4 × 6 = 24, so it works!",
+      visual: "4 × 6 = 24 ✓",
+      tip: "Re-checking helps you build confidence.",
     },
   ],
-  realWorldExample:
-    "Imagine: You have 234 Leones and want to share equally among 6 friends. Each friend gets 39 Leones!",
+  realWorldExample: "If you have 24 mangoes and share them with 6 friends, each friend will get 4 mangoes.",
   practiceProblems: [
-    { question: "What is 144 ÷ 6?", answer: 24, hint: "Start with: How many 6s in 14?" },
-    { question: "What is 156 ÷ 6?", answer: 26, hint: "Remember to bring down each digit" },
+    { question: "What is 18 ÷ 6?", answer: "3", hint: "Think of 6 times what gives 18." },
+    { question: "What is 30 ÷ 6?", answer: "5", hint: "Use the same idea with 30." },
   ],
+  encouragement: "Nice work! Keep sharing your ideas and practicing.",
 }
+
+const SAMPLE_PROBLEMS = [
+  "If I share 36 candies equally with 6 friends, how many candies does each friend get?",
+  "Mom baked 5 trays of 8 cookies each. How many cookies did she bake in total?",
+  "A rectangle is 9 cm long and has a perimeter of 30 cm. What is its width?",
+  "I have $24 and want to buy notebooks that cost $3 each. How many notebooks can I buy?",
+]
 
 export default function MathSolvingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  void id
 
-  const [currentView, setCurrentView] = useState<ViewState>("question")
+  const [currentView, setCurrentView] = useState<ViewState>("entry")
+  const [problemInput, setProblemInput] = useState("")
+  const [tutorProblem, setTutorProblem] = useState<TutorProblem | null>(null)
+  const [isLoadingProblem, setIsLoadingProblem] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState(0)
   const [userAnswer, setUserAnswer] = useState("")
-  const [problemsSolved, setProblemsSolved] = useState(15)
+  const [problemsSolved, setProblemsSolved] = useState(0)
   const [showCelebration, setShowCelebration] = useState(false)
   const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -112,32 +111,155 @@ export default function MathSolvingPage({ params }: { params: Promise<{ id: stri
     }
   }, [])
 
+  useEffect(() => {
+    void loadMathStats()
+  }, [id])
+
+  const loadMathStats = async () => {
+    try {
+      const supabase = createBrowserClient()
+      const { data, error } = await supabase
+        .from("study_sessions")
+        .select("correct_answers")
+        .eq("student_id", id)
+        .eq("subject", "Math")
+
+      if (error) {
+        console.error("[v0] Failed to load math stats:", error)
+        return
+      }
+
+      const totalSolved =
+        data?.reduce((sum, session) => sum + (typeof session.correct_answers === "number" ? session.correct_answers : 0), 0) || 0
+
+      setProblemsSolved(totalSolved)
+    } catch (error) {
+      console.error("[v0] Unexpected error loading math stats:", error)
+    }
+  }
+
+  const recordMathSession = async () => {
+    try {
+      const supabase = createBrowserClient()
+      const now = new Date().toISOString()
+      const { error } = await supabase.from("study_sessions").insert({
+        student_id: id,
+        subject: "Math",
+        duration_minutes: 5,
+        questions_answered: 1,
+        correct_answers: 1,
+        started_at: now,
+        ended_at: now,
+      })
+
+      if (error) {
+        console.error("[v0] Failed to record math session:", error)
+        return
+      }
+
+      await loadMathStats()
+    } catch (error) {
+      console.error("[v0] Unexpected error recording math session:", error)
+    }
+  }
+
+  const handleProblemSubmit = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault()
+
+    const trimmed = problemInput.trim()
+    if (!trimmed) {
+      setErrorMessage("Please type a math problem for Moe to solve.")
+      return
+    }
+
+    setIsLoadingProblem(true)
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch("/api/solve-math", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problem: trimmed }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(data.error ?? "Moe couldn't solve that just now. Try a simpler version.")
+        return
+      }
+
+      const solution = data.solution as TutorProblem | undefined
+
+      if (!solution) {
+        setErrorMessage("Moe wasn't sure about that one. Let's try rephrasing the problem.")
+        return
+      }
+
+      setTutorProblem(solution)
+      setCurrentStep(0)
+      setUserAnswer("")
+      setCurrentView("question")
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel()
+      }
+    } catch (error) {
+      console.error("[v0] Failed to fetch tutor solution:", error)
+      setErrorMessage("We lost connection to Moe. Please try again in a moment.")
+    } finally {
+      setIsLoadingProblem(false)
+    }
+  }
+
   const handleStepComplete = () => {
-    if (currentStep < PROBLEM.steps.length - 1) {
+    const steps = (tutorProblem ?? FALLBACK_PROBLEM).steps
+    setErrorMessage(null)
+    if (currentStep < steps.length - 1) {
       setCurrentStep((step) => step + 1)
     } else {
       setCurrentView("practice")
     }
   }
 
-  const handleAnswerSubmit = () => {
-    const parsed = Number.parseInt(userAnswer, 10)
-    if (Number.isNaN(parsed)) {
+  const normalizeAnswer = (value: string) => value.trim().toLowerCase().replace(/\s+/g, "")
+
+  const handleAnswerSubmit = async () => {
+    const problem = tutorProblem ?? FALLBACK_PROBLEM
+
+    if (!userAnswer.trim()) {
       return
     }
 
-    if (parsed === PROBLEM.answer) {
-  setShowCelebration(true)
-  setProblemsSolved((prev) => prev + 1)
+    const normalizedUser = normalizeAnswer(userAnswer)
+    const normalizedCorrect = normalizeAnswer(problem.answer)
+
+    const numericUser = Number.parseFloat(userAnswer)
+    const numericCorrect = Number.parseFloat(problem.answer)
+    const bothNumeric = !Number.isNaN(numericUser) && !Number.isNaN(numericCorrect)
+
+    const isCorrect =
+      (bothNumeric && Math.abs(numericUser - numericCorrect) < 1e-6) || normalizedUser === normalizedCorrect
+
+    if (isCorrect) {
+      setErrorMessage(null)
+      setShowCelebration(true)
       celebrationTimeoutRef.current = setTimeout(() => {
         setShowCelebration(false)
         setCurrentView("success")
       }, 1500)
+      setUserAnswer("")
+      await recordMathSession()
     } else {
-      alert("Not quite! Let's review the steps again.")
+      setErrorMessage("Not quite! Let's review the steps again together.")
       setUserAnswer("")
       setCurrentStep(0)
       setCurrentView("solving")
+    }
+  }
+
+  function stopSpeech() {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel()
     }
   }
 
@@ -147,58 +269,23 @@ export default function MathSolvingPage({ params }: { params: Promise<{ id: stri
     }
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 0.8
-    window.speechSynthesis.cancel()
+    stopSpeech()
     window.speechSynthesis.speak(utterance)
   }
 
-  const Celebration = () =>
-    showCelebration ? (
-      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div className="text-9xl animate-ping">⭐</div>
-      </div>
-    ) : null
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <div className="rounded-2xl border-4 border-green-200 bg-white p-8 shadow-xl">
+          <div className="mb-6 text-center">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-4xl">
+              🤖
+            </div>
+            <h3 className="mb-2 text-xl font-bold text-gray-800">You asked Moe:</h3>
+            <p className="mb-4 whitespace-pre-wrap text-4xl font-bold text-green-600">{problem.question}</p>
 
-  const QuestionView = () => (
-    <div className="mx-auto max-w-3xl p-6">
-      <div className="rounded-2xl border-4 border-green-200 bg-white p-8 shadow-xl">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-4xl">
-            🤖
-          </div>
-          <h3 className="mb-2 text-xl font-bold text-gray-800">You asked Moe:</h3>
-          <p className="mb-4 text-4xl font-bold text-green-600">{PROBLEM.question}</p>
-
-          <div className="mb-6 inline-block rounded-full border-2 border-green-200 bg-green-50 px-6 py-3">
-            <p className="text-sm text-gray-600">
-              Difficulty: <span className="font-bold text-green-600">{PROBLEM.difficulty}</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="mb-6 rounded-xl border-2 border-blue-200 bg-blue-50 p-6">
-          <div className="mb-3 flex items-center gap-3">
-            <Lightbulb className="h-6 w-6 text-blue-600" />
-            <p className="font-bold text-gray-800">Quick tip before we start:</p>
-          </div>
-          <p className="text-gray-700">
-            Don&apos;t worry if it looks hard! Moe will break it into small, easy steps. You got this! 💪
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setCurrentView("solving")
-            setCurrentStep(0)
-          }}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-green-600 py-4 text-lg font-bold text-white shadow-lg transition hover:from-green-600 hover:to-green-700 hover:shadow-xl"
-        >
-          Show Me How to Solve It!
-          <ArrowRight className="h-6 w-6" />
-        </button>
-      </div>
-    </div>
-  )
+            <div className="mb-6 inline-block rounded-full border-2 border-green-200 bg-green-50 px-6 py-3">
+              <p className="text-sm text-gray-600">
+                Topic: <span className="font-bold text-green-600 capitalize">{problem.topic}</span> • Difficulty:{
 
   const SolvingView = () => {
     const step = PROBLEM.steps[currentStep]
