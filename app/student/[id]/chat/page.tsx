@@ -137,54 +137,14 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
   const [isGeneratingSentence, setIsGeneratingSentence] = useState(false)
   const [studyTime, setStudyTime] = useState(0)
   const searchParams = useSearchParams()
-
   const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, setInput } = useSimpleChat({
-  // Voice input state
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
-
-  // Voice input handler
-  const startListening = () => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech recognition not supported in this browser.");
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-    recognition.onresult = (event: any) => {
-      const transcript = event?.results?.[0]?.[0]?.transcript as string | undefined;
-      if (transcript) {
-        setInput(transcript);
-      }
-      setIsListening(false);
-    };
-    recognition.onerror = () => {
-      setIsListening(false);
-    };
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current?.abort?.();
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  };
-  const stopListening = () => {
-    recognitionRef.current?.stop?.();
-    setIsListening(false);
-  };
     api: "/api/chat",
     body: {
       studentId: id,
       mode,
     },
     onFinish: async (assistantMessage, { userMessage, success }) => {
-      if (!success || mode === "reading") {
-        return
-      }
+      if (!success || mode === "reading") return
 
       try {
         const supabase = getSupabaseBrowserClient()
@@ -221,15 +181,47 @@ export default function ChatWithMoePage({ params }: { params: Promise<{ id: stri
             questions_correct: 0,
           })
 
-          if (sessionLogError) {
-            console.error("[v0] Error logging study session:", sessionLogError)
-          }
+          if (sessionLogError) console.error("[v0] Error logging study session:", sessionLogError)
         }
       } catch (error) {
         console.error("[v0] Error logging to database:", error)
       }
     },
   })
+
+  // Voice input state and handlers (defined after the hook)
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef<any>(null)
+
+  const startListening = () => {
+    if (typeof window === "undefined") return
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert("Speech recognition not supported in this browser.")
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognition.continuous = false
+    recognition.onresult = (event: any) => {
+      const transcript = event?.results?.[0]?.[0]?.transcript as string | undefined
+      if (transcript) setInput(transcript)
+      setIsListening(false)
+    }
+    recognition.onerror = () => setIsListening(false)
+    recognition.onend = () => setIsListening(false)
+    recognitionRef.current?.abort?.()
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsListening(true)
+  }
+
+  const stopListening = () => {
+    recognitionRef.current?.stop?.()
+    setIsListening(false)
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })

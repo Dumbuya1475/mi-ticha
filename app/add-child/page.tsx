@@ -172,7 +172,7 @@ export default function AddChildPage() {
                     <SelectValue placeholder="Select grade" />
                   </SelectTrigger>
                   <SelectContent>
-                    {["Primary 3", "Primary 4", "Primary 5", "Primary 6", "JSS 1", "JSS 2", "JSS 3"].map((grade) => (
+                    {["Class 3", "Class 4", "Class 5", "Class 6", "JSS 1", "JSS 2", "JSS 3"].map((grade) => (
                       <SelectItem key={grade} value={grade} className="text-base">
                         {grade}
                       </SelectItem>

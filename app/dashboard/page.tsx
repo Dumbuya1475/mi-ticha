@@ -313,12 +313,19 @@ export default function DashboardPage() {
         {/* Children List */}
         <div className="mb-6 flex items-center justify-between">
           <h3 className="font-bold text-2xl">Your Children</h3>
-          <Button asChild className="font-semibold">
-            <Link href="/add-child">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Child
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            {children.length >= 2 && (
+              <Button asChild variant="outline" className="font-semibold">
+                <Link href="/dashboard/compare">Compare Children</Link>
+              </Button>
+            )}
+            <Button asChild className="font-semibold">
+              <Link href="/add-child">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Child
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {children.length > 0 ? (
