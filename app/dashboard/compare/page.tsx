@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import ReactMarkdown from 'react-markdown'
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
