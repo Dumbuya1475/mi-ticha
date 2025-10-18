@@ -92,7 +92,7 @@ export default function ReadingPracticePage({ params }: { params: Promise<{ id: 
         setPassages(getSamplePassages())
       } else if (data && data.length > 0) {
         const fallbackPassages = getSamplePassages()
-        const mappedPassages: ReadingPassage[] = data.map((passage, index) => {
+  const mappedPassages: ReadingPassage[] = data.map((passage: Record<string, unknown>, index: number) => {
           const fallback = fallbackPassages[index % fallbackPassages.length]
           const difficulty = (passage as any).difficulty_level || (passage as any).level || fallback.level
           const content = (passage as any).text || (passage as any).content || fallback.text
@@ -266,33 +266,26 @@ Mariama's mother smiled. She knew her daughter was learning important skills tha
     setStage("results")
 
     try {
-      const supabase = createBrowserClient()
-  const durationMinutes = Math.max(1, Math.round(timeElapsed / 60) || 1)
-  const totalWords = countWords(selectedPassage.text)
-
-      const { error: readingError } = await supabase.from("reading_activities").insert({
-        student_id: id,
-        passage_id: isUuid(selectedPassage.id) ? selectedPassage.id : null,
-        title: selectedPassage.title,
-        duration_minutes: durationMinutes,
-        comprehension_score: Math.round((correctCount / selectedPassage.questions.length) * 100),
-        words_read: totalWords,
+      const durationMinutes = Math.max(1, Math.round(timeElapsed / 60) || 1)
+      const totalWords = countWords(selectedPassage.text)
+      const response = await fetch("/api/reading/log-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: id,
+          passageId: isUuid(selectedPassage.id) ? selectedPassage.id : null,
+          title: selectedPassage.title,
+          durationMinutes,
+          comprehensionScore: Math.round((correctCount / selectedPassage.questions.length) * 100),
+          wordsRead: totalWords,
+          questionsAnswered: selectedPassage.questions.length,
+          questionsCorrect: correctCount,
+        }),
       })
 
-      if (readingError) {
-        throw readingError
-      }
-
-      const { error: sessionError } = await supabase.from("study_sessions").insert({
-        student_id: id,
-        subject: "Reading",
-        duration_minutes: durationMinutes,
-        questions_answered: selectedPassage.questions.length,
-        questions_correct: correctCount,
-      })
-
-      if (sessionError) {
-        throw sessionError
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload.error || "Failed to save reading session")
       }
 
       console.log("[v0] Reading session saved successfully")

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Bell, LogOut, BookOpen, MessageSquare, Clock, TrendingUp } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -43,6 +44,8 @@ export default function DashboardPage() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [parentId, setParentId] = useState<string | null>(null)
+  const [selectedChildId, setSelectedChildId] = useState<string>("")
+  const [switchStatus, setSwitchStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -180,6 +183,12 @@ export default function DashboardPage() {
     fetchData()
   }, [router])
 
+  useEffect(() => {
+    if (children.length > 0 && !selectedChildId) {
+      setSelectedChildId(children[0].id)
+    }
+  }, [children, selectedChildId])
+
   function formatLastActive(date: Date): string {
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
@@ -196,6 +205,33 @@ export default function DashboardPage() {
     const supabase = createBrowserClient()
     await supabase.auth.signOut()
     router.push("/login")
+  }
+
+  const handleSwitchAccount = () => {
+    if (!selectedChildId) {
+      setSwitchStatus({ type: "error", message: "Pick a student to switch into." })
+      return
+    }
+
+    const target = children.find((child) => child.id === selectedChildId)
+
+    if (!target) {
+      setSwitchStatus({ type: "error", message: "That student is no longer available." })
+      return
+    }
+
+    try {
+      if (typeof window === "undefined") {
+        throw new Error("Switching requires a browser environment")
+      }
+      localStorage.setItem("studentId", target.id)
+      localStorage.setItem("studentName", target.name)
+      setSwitchStatus({ type: "success", message: `Switched to ${target.name}'s view.` })
+      router.push(`/student/${target.id}`)
+    } catch (error) {
+      console.error("[v0] Failed to switch account:", error)
+      setSwitchStatus({ type: "error", message: "Couldn't switch accounts right now." })
+    }
   }
 
   if (isLoading) {
@@ -309,6 +345,41 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {children.length > 0 ? (
+          <Card className="mb-8 border-2 border-primary/20 bg-white">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl">Jump to Student View</CardTitle>
+              <CardDescription>
+                Switch into a child account without logging out. We&apos;ll remember your selection on this device.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                <Select value={selectedChildId} onValueChange={(value) => setSelectedChildId(value)}>
+                  <SelectTrigger className="min-w-[200px]">
+                    <SelectValue placeholder="Choose a student" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {children.map((child) => (
+                      <SelectItem key={child.id} value={child.id}>
+                        {child.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleSwitchAccount} className="sm:w-auto">
+                  Switch to student dashboard
+                </Button>
+              </div>
+              {switchStatus ? (
+                <p className={`text-sm ${switchStatus.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
+                  {switchStatus.message}
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Children List */}
         <div className="mb-6 flex items-center justify-between">

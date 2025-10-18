@@ -23,6 +23,9 @@ interface Child {
 export default function CompareChildrenPage() {
   const [children, setChildren] = useState<Child[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [summary, setSummary] = useState<string>("")
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchChildren() {
@@ -119,6 +122,39 @@ export default function CompareChildrenPage() {
     fetchChildren()
   }, [])
 
+  useEffect(() => {
+    const generateSummary = async () => {
+      if (isLoading || children.length === 0) {
+        return
+      }
+
+      try {
+        setIsSummaryLoading(true)
+        setSummaryError(null)
+
+        const response = await fetch("/api/ai-summary/compare-children", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ children }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Summary request failed with status ${response.status}`)
+        }
+
+        const data: { summary?: string } = await response.json()
+        setSummary(data.summary ?? "")
+      } catch (error) {
+        console.error("[v0] Failed to generate AI summary:", error)
+        setSummaryError("Moe had trouble summarizing right now. Please try again in a moment.")
+      } finally {
+        setIsSummaryLoading(false)
+      }
+    }
+
+    void generateSummary()
+  }, [children, isLoading])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-blue-50 to-green-50 p-6">
       <div className="mx-auto max-w-5xl">
@@ -177,10 +213,19 @@ export default function CompareChildrenPage() {
             </table>
           </div>
         )}
-        {/* Placeholder for AI summary */}
         <Card className="mt-8 p-6 border-2 border-blue-300 bg-white shadow-lg">
           <h2 className="text-xl font-bold mb-2 text-blue-700">AI Summary</h2>
-          <p className="text-gray-700">Coming soon: Moe will analyze your children's strengths, weaknesses, and suggest ways to improve.</p>
+          {isSummaryLoading ? (
+            <p className="text-gray-500">Moe is thinking…</p>
+          ) : summaryError ? (
+            <p className="text-red-600 text-sm font-medium">{summaryError}</p>
+          ) : summary ? (
+            <div className="prose prose-sm max-w-none text-gray-700">
+              <ReactMarkdown>{summary}</ReactMarkdown>
+            </div>
+          ) : (
+            <p className="text-gray-500">Add learning activity so Moe can compare your children.</p>
+          )}
         </Card>
       </div>
     </div>

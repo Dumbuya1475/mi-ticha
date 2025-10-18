@@ -6,7 +6,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { MessageSquare, BookOpen, Trophy, Clock, LogOut, Volume2, Calculator, BookMarked } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import { MessageSquare, BookOpen, Trophy, Clock, LogOut, Volume2, Calculator, BookMarked, Target } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 interface Student {
@@ -14,6 +15,7 @@ interface Student {
   name: string
   age: number
   grade_level: string
+  daily_study_goal_minutes: number | null
 }
 
 export default function StudentHomePage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,6 +23,8 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
   const router = useRouter()
   const [student, setStudent] = useState<Student | null>(null)
   const [stats, setStats] = useState({ streak: 0, totalSessions: 0 })
+  const [dailyGoalMinutes, setDailyGoalMinutes] = useState<number>(30)
+  const [todayMinutes, setTodayMinutes] = useState<number>(0)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -63,7 +67,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
       // Load student info
       const { data: studentData, error: studentError } = await supabase
         .from("students")
-        .select("id, name, age, grade_level")
+  .select("id, name, age, grade_level, daily_study_goal_minutes")
         .eq("id", id)
         .maybeSingle()
 
@@ -88,11 +92,15 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
       }
 
       setStudent(studentData)
+      const configuredGoal = Number.isFinite(studentData?.daily_study_goal_minutes)
+        ? Number(studentData.daily_study_goal_minutes)
+        : 30
+      setDailyGoalMinutes(configuredGoal > 0 ? configuredGoal : 30)
 
       // Calculate learning streak (consecutive days with activity) using study sessions
       const { data: recentSessions } = await supabase
         .from("study_sessions")
-        .select("started_at")
+        .select("started_at, duration_minutes")
         .eq("student_id", id)
         .order("started_at", { ascending: false })
         .limit(60)
@@ -121,7 +129,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
       // Calculate total sessions (distinct days with activity)
       const { data: allSessions } = await supabase
         .from("study_sessions")
-        .select("started_at")
+        .select("started_at, duration_minutes")
         .eq("student_id", id)
 
       const totalSessions = allSessions
@@ -137,6 +145,28 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
               .filter((dateString): dateString is string => Boolean(dateString)),
           ).size
         : 0
+
+      if (allSessions && allSessions.length > 0) {
+        const todayStart = new Date()
+        todayStart.setHours(0, 0, 0, 0)
+        const todayEnd = new Date(todayStart)
+        todayEnd.setDate(todayEnd.getDate() + 1)
+
+        const minutesToday = allSessions.reduce((sum, session) => {
+          if (!session.started_at) {
+            return sum
+          }
+          const startedAt = new Date(session.started_at)
+          if (startedAt >= todayStart && startedAt < todayEnd) {
+            return sum + (Number(session.duration_minutes) || 0)
+          }
+          return sum
+        }, 0)
+
+        setTodayMinutes(minutesToday)
+      } else {
+        setTodayMinutes(0)
+      }
 
       setStats({ streak, totalSessions })
     } catch (error) {
@@ -163,6 +193,14 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
   if (!student) {
     return null
   }
+
+  const normalizedGoal = dailyGoalMinutes > 0 ? dailyGoalMinutes : 30
+  const goalProgress = normalizedGoal > 0 ? Math.min((todayMinutes / normalizedGoal) * 100, 100) : 0
+  const goalRemaining = Math.max(Math.round(normalizedGoal - todayMinutes), 0)
+  const goalMet = normalizedGoal > 0 && goalRemaining === 0
+  const goalMessage = goalMet
+    ? "Amazing! You already met today’s goal—anything extra is bonus practice."
+    : `Only ${goalRemaining} more minute${goalRemaining === 1 ? "" : "s"} to reach today’s goal.`
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1e1b4b,_#5b21b6_45%,_#ec4899_85%)]">
@@ -192,7 +230,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
 
       <main className="mx-auto max-w-4xl px-4 pb-8">
         {/* Stats Cards */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-2">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card className="border-2 border-white/20 bg-white/95 backdrop-blur-sm">
             <CardContent className="flex items-center justify-between pt-6">
               <div>
@@ -214,6 +252,26 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-secondary/10">
                 <Clock className="h-7 w-7 text-secondary" />
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-2 border-white/20 bg-white/95 backdrop-blur-sm">
+            <CardContent className="pt-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="mb-1 text-muted-foreground text-sm">Today&apos;s Minutes</p>
+                  <p className="font-bold text-3xl text-rose-600">
+                    {Math.round(todayMinutes)}/{normalizedGoal}
+                  </p>
+                </div>
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-100">
+                  <Target className="h-7 w-7 text-rose-600" />
+                </div>
+              </div>
+              <Progress value={goalProgress} className="h-2" />
+              <p className="mt-3 text-xs font-medium text-muted-foreground">
+                {goalMet ? "Goal complete—great job!" : `${goalProgress.toFixed(0)}% of today’s goal done.`}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -332,7 +390,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
         {/* Encouragement Message */}
         <Card className="mt-8 border-2 border-white/20 bg-white/95 backdrop-blur-sm">
           <CardContent className="py-6 text-center">
-            <p className="font-semibold text-lg text-accent">Keep up the great work! You're doing amazing!</p>
+            <p className="font-semibold text-lg text-accent">{goalMessage}</p>
           </CardContent>
         </Card>
       </main>
