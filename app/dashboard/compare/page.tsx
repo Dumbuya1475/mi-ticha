@@ -7,6 +7,17 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+// Formats a date as "X days ago", "Today", etc.
+function formatLastActive(date: Date): string {
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays === 0) return "Today"
+  if (diffDays === 1) return "Yesterday"
+  if (diffDays < 7) return `${diffDays} days ago`
+  return date.toLocaleDateString()
+}
+
 interface Child {
   id: string
   name: string
@@ -51,7 +62,7 @@ export default function CompareChildrenPage() {
         }
         // Calculate stats for each child
         const childrenWithStats = await Promise.all(
-          (studentsData || []).map(async (student) => {
+          (studentsData || []).map(async (student: any) => {
             // Get total sessions
             const { count: sessionsCount } = await supabase
               .from("study_sessions")
@@ -62,7 +73,7 @@ export default function CompareChildrenPage() {
               .from("study_sessions")
               .select("duration_minutes")
               .eq("student_id", student.id)
-            const totalMinutes = sessionsData?.reduce((sum, session) => sum + (session.duration_minutes || 0), 0) || 0
+            const totalMinutes = sessionsData?.reduce((sum: number, session: { duration_minutes?: number }) => sum + (session.duration_minutes || 0), 0) || 0
             const hoursLearned = Math.round((totalMinutes / 60) * 10) / 10
             // Get vocabulary progress
             const { count: wordsCount } = await supabase
@@ -78,8 +89,8 @@ export default function CompareChildrenPage() {
               .order("last_reviewed_at", { ascending: false })
               .limit(3)
             const recentWords = (latestWordsData ?? [])
-              .map((entry) => entry.word)
-              .filter((word): word is string => Boolean(word))
+              .map((entry: { word?: string }) => entry.word)
+              .filter((word: unknown): word is string => typeof word === "string" && Boolean(word))
             // Get last activity
             const { data: lastSession } = await supabase
               .from("study_sessions")

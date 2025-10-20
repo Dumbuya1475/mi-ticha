@@ -11,6 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Bell, LogOut, BookOpen, MessageSquare, Clock, TrendingUp } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+interface Student {
+  id: string
+  name: string
+  age: number
+  grade: string
+  parent_id: string
+}
+
 interface Child {
   id: string
   name: string
@@ -69,7 +77,6 @@ export default function DashboardPage() {
         const { data: studentsData, error: studentsError } = await supabase
           .from("students")
           .select("*")
-          .eq("parent_id", user.id)
 
         if (studentsError) {
           console.error("[v0] Error fetching students:", studentsError)
@@ -78,8 +85,9 @@ export default function DashboardPage() {
         }
 
         // Calculate stats for each child
+        const students = (studentsData ?? []) as Student[]
         const childrenWithStats = await Promise.all(
-          (studentsData || []).map(async (student) => {
+          students.map(async (student) => {
             // Get total sessions
             const { count: sessionsCount } = await supabase
               .from("study_sessions")
@@ -92,7 +100,7 @@ export default function DashboardPage() {
               .select("duration_minutes")
               .eq("student_id", student.id)
 
-            const totalMinutes = sessionsData?.reduce((sum, session) => sum + (session.duration_minutes || 0), 0) || 0
+            const totalMinutes = sessionsData?.reduce((sum: number, session: { duration_minutes: number | null }) => sum + (session.duration_minutes || 0), 0) || 0
             const hoursLearned = Math.round((totalMinutes / 60) * 10) / 10
 
             // Get vocabulary progress
@@ -111,8 +119,8 @@ export default function DashboardPage() {
               .limit(3)
 
             const recentWords = (latestWordsData ?? [])
-              .map((entry) => entry.word)
-              .filter((word): word is string => Boolean(word))
+              .map((entry: { word: string | null }) => entry.word)
+              .filter((word: string | null): word is string => Boolean(word))
 
             // Get last activity
             const { data: lastSession } = await supabase

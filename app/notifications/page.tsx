@@ -9,6 +9,16 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Bell, CheckCircle2, TrendingUp, BookOpen, MessageSquare, Clock } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+interface ParentNotification {
+  id: string
+  type: string
+  title: string
+  message: string
+  created_at: string
+  read: boolean
+  parent_id: string
+}
+
 interface Notification {
   id: string
   type: string
@@ -46,7 +56,6 @@ export default function NotificationsPage() {
         const { data: notificationsData, error: notificationsError } = await supabase
           .from("parent_notifications")
           .select("*")
-          .eq("parent_id", user.id)
           .order("created_at", { ascending: false })
 
         if (notificationsError) {
@@ -56,24 +65,47 @@ export default function NotificationsPage() {
         }
 
         // Map notifications to UI format
-        const formattedNotifications: Notification[] = (notificationsData || []).map((notif) => {
-          const iconMap: Record<string, any> = {
+        interface IconMap {
+          achievement: typeof TrendingUp;
+          activity: typeof BookOpen;
+          milestone: typeof CheckCircle2;
+          reminder: typeof Clock;
+          message: typeof MessageSquare;
+          [key: string]: any;
+        }
+
+        interface ColorStyle {
+          color: string;
+          bgColor: string;
+        }
+
+        interface ColorMap {
+          achievement: ColorStyle;
+          activity: ColorStyle;
+          milestone: ColorStyle;
+          reminder: ColorStyle;
+          message: ColorStyle;
+          [key: string]: ColorStyle;
+        }
+
+        const formattedNotifications: Notification[] = (notificationsData as ParentNotification[] || []).map((notif: ParentNotification) => {
+          const iconMap: IconMap = {
             achievement: TrendingUp,
             activity: BookOpen,
             milestone: CheckCircle2,
             reminder: Clock,
             message: MessageSquare,
-          }
+          };
 
-          const colorMap: Record<string, { color: string; bgColor: string }> = {
+          const colorMap: ColorMap = {
             achievement: { color: "text-accent", bgColor: "bg-accent/10" },
             activity: { color: "text-secondary", bgColor: "bg-secondary/10" },
             milestone: { color: "text-accent", bgColor: "bg-accent/10" },
             reminder: { color: "text-primary", bgColor: "bg-primary/10" },
             message: { color: "text-primary", bgColor: "bg-primary/10" },
-          }
+          };
 
-          const style = colorMap[notif.type] || { color: "text-primary", bgColor: "bg-primary/10" }
+          const style: ColorStyle = colorMap[notif.type] || { color: "text-primary", bgColor: "bg-primary/10" };
 
           return {
             id: notif.id,
@@ -84,8 +116,8 @@ export default function NotificationsPage() {
             read: notif.read,
             icon: iconMap[notif.type] || Bell,
             ...style,
-          }
-        })
+          };
+        });
 
         setNotifications(formattedNotifications)
         setIsLoading(false)

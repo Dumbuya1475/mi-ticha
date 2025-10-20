@@ -112,7 +112,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
         const today = new Date()
         today.setHours(0, 0, 0, 0)
 
-        recentSessions.forEach((session) => {
+        recentSessions.forEach((session: { started_at: string | null; duration_minutes: number | null }) => {
           if (!session.started_at) return
           const date = new Date(session.started_at)
           date.setHours(0, 0, 0, 0)
@@ -135,14 +135,14 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
       const totalSessions = allSessions
         ? new Set(
             allSessions
-              .map((session) => {
+              .map((session: { started_at: string | null; duration_minutes: number | null }) => {
                 if (!session.started_at) {
                   return null
                 }
 
                 return new Date(session.started_at).toDateString()
               })
-              .filter((dateString): dateString is string => Boolean(dateString)),
+              .filter((dateString: string | null): dateString is string => Boolean(dateString)),
           ).size
         : 0
 
@@ -152,7 +152,7 @@ export default function StudentHomePage({ params }: { params: Promise<{ id: stri
         const todayEnd = new Date(todayStart)
         todayEnd.setDate(todayEnd.getDate() + 1)
 
-        const minutesToday = allSessions.reduce((sum, session) => {
+        const minutesToday = allSessions.reduce((sum: number, session: { started_at: string | null; duration_minutes: number | null }) => {
           if (!session.started_at) {
             return sum
           }

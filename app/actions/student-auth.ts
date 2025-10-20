@@ -4,6 +4,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+interface Student {
+  id: string | number;
+  name: string;
+  auth_user_id: string;
+}
+
 export async function studentLogin(username: string, password: string) {
   try {
     const adminClient = getSupabaseAdminClient()
@@ -14,20 +20,15 @@ export async function studentLogin(username: string, password: string) {
       .select("id, name, auth_user_id")
       .ilike("name", username)
       .limit(5)
-
-    if (searchError) {
-      console.error("[v0] Search error:", searchError)
-      return { error: "Failed to find student" }
-    }
-
     if (!students || students.length === 0) {
       return { error: "Student not found. Please check your username." }
     }
 
     // If multiple matches, try exact match first
-    let student = students.find((s) => s.name.toLowerCase() === username.toLowerCase())
+    const typedStudents = students as Student[];
+    let student = typedStudents.find((s) => s.name.toLowerCase() === username.toLowerCase())
     if (!student) {
-      student = students[0] // Use first match
+      student = typedStudents[0] // Use first match
     }
 
     // Get the auth user email using admin client

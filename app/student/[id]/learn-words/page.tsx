@@ -237,7 +237,6 @@ export default function LearnWordsPage({ params }: { params: Promise<{ id: strin
     // Try to select a male voice
     const voices = synth.getVoices();
     const male = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male"))
-      || voices.find(v => v.lang.startsWith("en") && v.gender === "male")
       || voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("david"))
       || voices.find(v => v.lang.startsWith("en"));
     if (male) utterance.voice = male;
