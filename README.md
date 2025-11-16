@@ -23,22 +23,22 @@ Before you begin, ensure you have the following installed on your local machine:
 
 If you have the ZIP file, extract it to your desired location. If using Git:
 
-```bash
+\`\`\`bash
 git clone https://github.com/Dumbuya1475/mi-ticha.git
 cd mi-ticha
-```
+\`\`\`
 
 ### 2. Install Dependencies
 
 Navigate to the project directory and install the required packages:
 
-```bash
+\`\`\`bash
 npm install
 # or
 yarn install
 # or
 pnpm install
-```
+\`\`\`
 
 ### 3. Set Up Environment Variables
 
@@ -48,13 +48,13 @@ Create a `.env.local` file in the root directory of the project. See the `ENV_SE
 
 Start the development server:
 
-```bash
+\`\`\`bash
 npm run dev
 # or
 yarn dev
 # or
 pnpm dev
-```
+\`\`\`
 
 The application will be available at [http://localhost:3000](http://localhost:3000) or  [http://localhost:5000](http://localhost:5000)
 
@@ -62,7 +62,7 @@ The application will be available at [http://localhost:3000](http://localhost:30
 
 To create a production build:
 
-```bash
+\`\`\`bash
 npm run build
 npm start
 # or
@@ -71,11 +71,11 @@ yarn start
 # or
 pnpm build
 pnpm start
-```
+\`\`\`
 
 ## Project Structure
 
-```
+\`\`\`
 mi-ticha/
 ├── app/                    # Next.js app directory
 │   ├── page.tsx            # Landing page
@@ -91,7 +91,7 @@ mi-ticha/
 ├── next.config.mjs         # Next.js configuration
 ├── package.json            # Project dependencies
 └── tsconfig.json           # TypeScript configuration
-```
+\`\`\`
 
 ## Available Scripts
 
@@ -112,7 +112,7 @@ mi-ticha/
 
 ## Vocabulary Tracking
 
-```sql
+\`\`\`sql
 create table if not exists words_learned (
   id uuid primary key default gen_random_uuid(),
   student_id uuid not null references students(id) on delete cascade,
@@ -136,7 +136,7 @@ create table if not exists word_learning_sessions (
   payload jsonb,
   created_at timestamptz default now()
 );
-```
+\`\`\`
 
 These tables power the Learn Words experience and the parent dashboards. Grant row-level security policies so students can view their own words and parents can monitor progress.
 
@@ -146,27 +146,27 @@ These tables power the Learn Words experience and the parent dashboards. Grant r
 
 If port 3000 is already in use, you can specify a different port:
 
-```bash
+\`\`\`bash
 npm run dev -- -p 5000
-```
+\`\`\`
 
 ### Module Not Found Errors
 
 If you encounter module errors, try deleting `node_modules` and reinstalling:
 
-```bash
+\`\`\`bash
 rm -rf node_modules
 npm install
-```
+\`\`\`
 
 ### Build Errors
 
 Clear the Next.js cache:
 
-```bash
+\`\`\`bash
 rm -rf .next
 npm run build
-```
+\`\`\`
 
 ## Support
 
